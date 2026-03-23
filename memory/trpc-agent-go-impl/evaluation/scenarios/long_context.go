@@ -19,6 +19,7 @@ import (
 	"trpc.group/trpc-go/trpc-agent-go-benchmark/memory/trpc-agent-go-impl/evaluation/dataset"
 	"trpc.group/trpc-go/trpc-agent-go-benchmark/memory/trpc-agent-go-impl/evaluation/metrics"
 	"trpc.group/trpc-go/trpc-agent-go/model"
+	"trpc.group/trpc-go/trpc-agent-go/session"
 )
 
 // ScenarioType represents the evaluation scenario type.
@@ -26,9 +27,10 @@ type ScenarioType string
 
 // Scenario types.
 const (
-	ScenarioLongContext ScenarioType = "long_context"
-	ScenarioAgentic     ScenarioType = "agentic"
-	ScenarioAuto        ScenarioType = "auto"
+	ScenarioLongContext   ScenarioType = "long_context"
+	ScenarioSessionRecall ScenarioType = "session_recall"
+	ScenarioAgentic       ScenarioType = "agentic"
+	ScenarioAuto          ScenarioType = "auto"
 )
 
 // Config holds scenario evaluation configuration.
@@ -52,6 +54,16 @@ type Config struct {
 	// Only applies to agentic and auto scenarios.
 	QASearchPasses int
 
+	// SessionRecallResults controls how many recalled
+	// session events are preloaded during QA.
+	// Only applies to session_recall scenario.
+	SessionRecallResults int
+
+	// SessionRecallMinScore filters low-confidence
+	// session recall hits before preload injection.
+	// Only applies to session_recall scenario.
+	SessionRecallMinScore float64
+
 	// Debug options (primarily for benchmark diagnosis).
 	DebugDumpMemories bool
 	DebugMemLimit     int
@@ -61,30 +73,56 @@ type Config struct {
 // DefaultConfig returns default configuration.
 func DefaultConfig() Config {
 	return Config{
-		Scenario:          ScenarioLongContext,
-		MaxContext:        128000,
-		EnableLLMJudge:    false,
-		Verbose:           false,
-		SessionEventLimit: 1000,
-		QASearchPasses:    1,
-		DebugDumpMemories: false,
-		DebugMemLimit:     0,
-		DebugQALimit:      0,
+		Scenario:              ScenarioLongContext,
+		MaxContext:            128000,
+		EnableLLMJudge:        false,
+		Verbose:               false,
+		SessionEventLimit:     1000,
+		QASearchPasses:        1,
+		SessionRecallResults:  30,
+		SessionRecallMinScore: 0.3,
+		DebugDumpMemories:     false,
+		DebugMemLimit:         0,
+		DebugQALimit:          0,
 	}
 }
 
 // QAResult holds the result of a single QA evaluation.
 type QAResult struct {
-	QuestionID string            `json:"question_id"`
-	Question   string            `json:"question"`
-	Category   string            `json:"category"`
-	Expected   string            `json:"expected"`
-	Predicted  string            `json:"predicted"`
-	Metrics    metrics.QAMetrics `json:"metrics"`
-	LatencyMs  int64             `json:"latency_ms"`
-	TokensUsed int               `json:"tokens_used,omitempty"`
-	TokenUsage *TokenUsage       `json:"token_usage,omitempty"`
-	Steps      []StepTrace       `json:"steps,omitempty"`
+	QuestionID    string              `json:"question_id"`
+	Question      string              `json:"question"`
+	Category      string              `json:"category"`
+	Expected      string              `json:"expected"`
+	Predicted     string              `json:"predicted"`
+	Metrics       metrics.QAMetrics   `json:"metrics"`
+	LatencyMs     int64               `json:"latency_ms"`
+	TokensUsed    int                 `json:"tokens_used,omitempty"`
+	TokenUsage    *TokenUsage         `json:"token_usage,omitempty"`
+	Steps         []StepTrace         `json:"steps,omitempty"`
+	SessionRecall *SessionRecallTrace `json:"session_recall,omitempty"`
+}
+
+// SessionRecallTrace records the query-time session recall
+// request and retrieved hits for QA debugging.
+type SessionRecallTrace struct {
+	Query      string             `json:"query"`
+	MaxResults int                `json:"max_results,omitempty"`
+	MinScore   float64            `json:"min_score,omitempty"`
+	SearchMode session.SearchMode `json:"search_mode,omitempty"`
+	Hits       []SessionRecallHit `json:"hits,omitempty"`
+}
+
+// SessionRecallHit stores a single recalled session event.
+type SessionRecallHit struct {
+	SessionID        string     `json:"session_id"`
+	SessionCreatedAt time.Time  `json:"session_created_at,omitempty"`
+	EventID          string     `json:"event_id,omitempty"`
+	EventCreatedAt   time.Time  `json:"event_created_at,omitempty"`
+	Role             model.Role `json:"role,omitempty"`
+	Text             string     `json:"text"`
+	Score            float64    `json:"score,omitempty"`
+	DenseScore       float64    `json:"dense_score,omitempty"`
+	SparseScore      float64    `json:"sparse_score,omitempty"`
 }
 
 // SampleResult holds evaluation results for a single sample.
@@ -200,12 +238,15 @@ func (e *LongContextEvaluator) Evaluate(
 	catAgg := metrics.NewCategoryAggregator()
 	var sampleUsage TokenUsage
 
-	for _, qa := range sample.QA {
+	for i, qa := range sample.QA {
 		qaResult, err := e.evaluateQA(
 			ctx, transcript, transcriptTokens, qa,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("evaluate QA %s: %w", qa.QuestionID, err)
+		}
+		if e.config.Verbose {
+			logVerboseQAResult(i, len(sample.QA), qa, qaResult)
 		}
 		result.QAResults = append(result.QAResults, qaResult)
 		catAgg.Add(qa.Category, qaResult.Metrics)

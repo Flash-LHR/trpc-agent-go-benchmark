@@ -236,7 +236,7 @@ cp locomo/data/locomo10/*.json ../data/
 ## Running the Benchmark
 
 ```bash
-cd memory/trpc-agent-go-impl
+cd benchmark/memory/trpc-agent-go-impl
 
 # Install dependencies.
 go mod tidy
@@ -311,11 +311,11 @@ Results are saved in JSON format:
 
 ## Memory Backend Comparison
 
-| Backend  | Pros                               | Cons                                         |
-| -------- | ---------------------------------- | -------------------------------------------- |
-| inmemory | Fast, no setup required            | No vector similarity, keyword-based matching |
-| pgvector | Vector similarity search, scalable | Requires PostgreSQL setup                    |
-| mysql    | Full-text search, widely deployed  | Requires MySQL setup                         |
+| Backend  | Pros                                | Cons                                         |
+| -------- | ----------------------------------- | -------------------------------------------- |
+| inmemory | Fast, no setup required             | No vector similarity, keyword-based matching |
+| pgvector | Vector similarity search, scalable  | Requires PostgreSQL setup                    |
+| mysql    | App-layer BM25-style keyword search | Requires MySQL setup                         |
 
 ### Expected Results
 

@@ -243,20 +243,7 @@ func (e *AgenticEvaluator) Evaluate(
 			qaResult = qaResultFromError(qa, err)
 		}
 		if e.config.Verbose {
-			log.Printf("  [QA %d/%d] %s (%s)",
-				i+1, len(sample.QA),
-				qa.QuestionID, qa.Category,
-			)
-			if qaResult.Steps != nil {
-				logQATrace(
-					qa.QuestionID, qa.Question,
-					qa.Answer, qaResult.Predicted,
-					qaResult.Metrics, collectResult{
-						steps: qaResult.Steps,
-					},
-					qaResult.LatencyMs,
-				)
-			}
+			logVerboseQAResult(i, len(sample.QA), qa, qaResult)
 		}
 		result.QAResults = append(result.QAResults, qaResult)
 		catAgg.Add(qa.Category, qaResult.Metrics)

@@ -50,6 +50,8 @@ import (
 	memorypgvector "trpc.group/trpc-go/trpc-agent-go/memory/pgvector"
 	"trpc.group/trpc-go/trpc-agent-go/model"
 	openaimodel "trpc.group/trpc-go/trpc-agent-go/model/openai"
+	"trpc.group/trpc-go/trpc-agent-go/session"
+	sessionpgvector "trpc.group/trpc-go/trpc-agent-go/session/pgvector"
 )
 
 // Command-line flags.
@@ -64,7 +66,7 @@ var (
 		"scenario",
 		"long_context",
 		"Evaluation scenario (comma-separated): "+
-			"long_context, agentic, auto, all",
+			"long_context, session_recall, agentic, auto, all",
 	)
 	// Memory backend flags (comma-separated for multiple).
 	flagMemoryBackends = flag.String(
@@ -86,8 +88,13 @@ var (
 	)
 	flagVectorTopK = flag.Int(
 		"vector-topk",
-		20,
+		30,
 		"Top-k results for vector backends (pgvector, sqlitevec)",
+	)
+	flagSessionRecallMinScore = flag.Float64(
+		"session-recall-min-score",
+		0.3,
+		"Minimum score for preloaded session recall hits",
 	)
 	flagMySQLDSN = flag.String(
 		"mysql-dsn",
@@ -135,6 +142,7 @@ const (
 	sqliteTableAutoBase       = "memory_eval_auto_sqlite"
 	sqliteVecTableDefaultBase = "memory_eval_sqlitevec"
 	sqliteVecTableAutoBase    = "memory_eval_auto_sqlitevec"
+	sessionRecallTableBase    = "session_eval_recall"
 
 	autoMemoryAsyncWorkers = 3
 	autoMemoryQueueSize    = 200
@@ -219,6 +227,7 @@ func main() {
 	modelName := getModelName()
 	evalModelName := getEvalModelName()
 	outputDir := *flagOutput
+	scenariosToRun := getScenarios(*flagScenario)
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		log.Fatalf("Failed to create output directory: %v", err)
@@ -231,17 +240,8 @@ func main() {
 	log.Printf("Model: %s", modelName)
 	log.Printf("Eval Model: %s", evalModelName)
 	log.Printf("Scenario: %s", *flagScenario)
-	log.Printf("Memory Backends: %v", backends)
 	log.Printf("LLM Judge: %v", *flagLLMJudge)
-	if *flagQAHistoryTurns > 0 {
-		log.Printf("QA History Turns: %d", *flagQAHistoryTurns)
-	}
-	if *flagQASearchPasses > 1 {
-		log.Printf(
-			"QA Search Passes: %d",
-			*flagQASearchPasses,
-		)
-	}
+	logScenarioConfig(scenariosToRun, backends)
 	log.Printf("Output: %s", outputDir)
 	if *flagTableSuffix != "" {
 		log.Printf("Table Suffix: %s", *flagTableSuffix)
@@ -279,25 +279,36 @@ func main() {
 
 	// Base scenario config.
 	baseConfig := scenarios.Config{
-		MaxContext:        *flagMaxContext,
-		EnableLLMJudge:    *flagLLMJudge,
-		Verbose:           *flagVerbose,
-		SessionEventLimit: *flagSessionEventLimit,
-		QAHistoryTurns:    *flagQAHistoryTurns,
-		QASearchPasses:    *flagQASearchPasses,
-		DebugDumpMemories: *flagDebugDumpMemories,
-		DebugMemLimit:     *flagDebugMemLimit,
-		DebugQALimit:      *flagDebugQALimit,
+		MaxContext:            *flagMaxContext,
+		EnableLLMJudge:        *flagLLMJudge,
+		Verbose:               *flagVerbose,
+		SessionEventLimit:     *flagSessionEventLimit,
+		QAHistoryTurns:        *flagQAHistoryTurns,
+		QASearchPasses:        *flagQASearchPasses,
+		SessionRecallResults:  *flagVectorTopK,
+		SessionRecallMinScore: *flagSessionRecallMinScore,
+		DebugDumpMemories:     *flagDebugDumpMemories,
+		DebugMemLimit:         *flagDebugMemLimit,
+		DebugQALimit:          *flagDebugQALimit,
 	}
-
-	// Determine scenarios to run.
-	scenariosToRun := getScenarios(*flagScenario)
 
 	// Run evaluation for each scenario and backend combination.
 	for _, scenarioType := range scenariosToRun {
 		// Long-context doesn't need memory backends.
 		if scenarioType == scenarios.ScenarioLongContext {
 			runScenario(samples, llm, evalLLM, scenarioType, "", baseConfig, outputDir)
+			continue
+		}
+		if scenarioType == scenarios.ScenarioSessionRecall {
+			runScenario(
+				samples,
+				llm,
+				evalLLM,
+				scenarioType,
+				"session_pgvector",
+				baseConfig,
+				outputDir,
+			)
 			continue
 		}
 
@@ -320,15 +331,65 @@ func parseMemoryBackends(backendsStr string) []string {
 	return backends
 }
 
+func logScenarioConfig(
+	scenariosToRun []scenarios.ScenarioType,
+	backends []string,
+) {
+	hasMemoryScenarios := containsScenario(
+		scenariosToRun,
+		scenarios.ScenarioAgentic,
+	) || containsScenario(
+		scenariosToRun,
+		scenarios.ScenarioAuto,
+	)
+	if containsScenario(scenariosToRun, scenarios.ScenarioLongContext) {
+		log.Printf("Context Mode: long_context transcript preload")
+	}
+	if containsScenario(scenariosToRun, scenarios.ScenarioSessionRecall) {
+		log.Printf("Session Backend: session_pgvector")
+		log.Printf("Session Recall Results: %d", *flagVectorTopK)
+		if *flagSessionRecallMinScore > 0 {
+			log.Printf(
+				"Session Recall Min Score: %.3f",
+				*flagSessionRecallMinScore,
+			)
+		}
+	}
+	if !hasMemoryScenarios {
+		return
+	}
+	log.Printf("Memory Backends: %v", backends)
+	if *flagQAHistoryTurns > 0 {
+		log.Printf("QA History Turns: %d", *flagQAHistoryTurns)
+	}
+	if *flagQASearchPasses > 1 {
+		log.Printf("QA Search Passes: %d", *flagQASearchPasses)
+	}
+}
+
+func containsScenario(
+	scenariosToRun []scenarios.ScenarioType,
+	target scenarios.ScenarioType,
+) bool {
+	for _, scenario := range scenariosToRun {
+		if scenario == target {
+			return true
+		}
+	}
+	return false
+}
+
 func getScenarios(scenario string) []scenarios.ScenarioType {
 	scenarioMap := map[string]scenarios.ScenarioType{
-		"long_context": scenarios.ScenarioLongContext,
-		"agentic":      scenarios.ScenarioAgentic,
-		"auto":         scenarios.ScenarioAuto,
+		"long_context":   scenarios.ScenarioLongContext,
+		"session_recall": scenarios.ScenarioSessionRecall,
+		"agentic":        scenarios.ScenarioAgentic,
+		"auto":           scenarios.ScenarioAuto,
 	}
 	if scenario == "all" {
 		return []scenarios.ScenarioType{
 			scenarios.ScenarioLongContext,
+			scenarios.ScenarioSessionRecall,
 			scenarios.ScenarioAgentic,
 			scenarios.ScenarioAuto,
 		}
@@ -393,6 +454,7 @@ func runScenario(
 
 	var evaluator scenarios.Evaluator
 	var memSvc memory.Service
+	var sessionSvc session.Service
 	var err error
 	memCfg := buildMemoryConfig(scenarioType, backend)
 	memOpts := buildMemoryServiceOptions(memCfg, llm)
@@ -400,6 +462,15 @@ func runScenario(
 	switch scenarioType {
 	case scenarios.ScenarioLongContext:
 		evaluator = scenarios.NewLongContextEvaluator(llm, evalLLM, config)
+	case scenarios.ScenarioSessionRecall:
+		sessionSvc, err = createSessionRecallService(config)
+		if err != nil {
+			log.Printf("Failed to create session recall service: %v", err)
+			return
+		}
+		evaluator = scenarios.NewSessionRecallEvaluator(
+			llm, evalLLM, sessionSvc, config,
+		)
 	case scenarios.ScenarioAgentic:
 		memSvc, err = createMemoryService(memCfg, memOpts)
 		if err != nil {
@@ -436,6 +507,9 @@ func runScenario(
 	if memSvc != nil {
 		memSvc.Close()
 	}
+	if sessionSvc != nil {
+		sessionSvc.Close()
+	}
 }
 
 func buildScenarioDir(outputDir string, scenario scenarios.ScenarioType, backend string) string {
@@ -459,10 +533,11 @@ func validateFlags() {
 	}
 
 	validScenarios := map[string]bool{
-		"long_context": true,
-		"agentic":      true,
-		"auto":         true,
-		"all":          true,
+		"long_context":   true,
+		"session_recall": true,
+		"agentic":        true,
+		"auto":           true,
+		"all":            true,
 	}
 	for _, s := range strings.Split(*flagScenario, ",") {
 		s = strings.TrimSpace(s)
@@ -489,6 +564,12 @@ func validateFlags() {
 	}
 	if *flagSessionEventLimit < 0 {
 		log.Fatalf("Invalid session-event-limit: %d", *flagSessionEventLimit)
+	}
+	if *flagSessionRecallMinScore < 0 {
+		log.Fatalf(
+			"Invalid session-recall-min-score: %f",
+			*flagSessionRecallMinScore,
+		)
 	}
 }
 
@@ -619,6 +700,34 @@ func createMemoryService(
 	default:
 		return createInMemoryService(opts), nil
 	}
+}
+
+func createSessionRecallService(
+	cfg scenarios.Config,
+) (session.Service, error) {
+	dsn := getPGVectorDSN()
+	if dsn == "" {
+		return nil, fmt.Errorf(
+			"pgvector-dsn or PGVECTOR_DSN is required for session_recall scenario",
+		)
+	}
+	embedModelName := getEmbedModelName()
+	emb := newEmbeddingEmbedder(embedModelName)
+	log.Printf(
+		"Creating session recall pgvector service (embed_model=%s)",
+		embedModelName,
+	)
+	return sessionpgvector.NewService(
+		sessionpgvector.WithPostgresClientDSN(dsn),
+		sessionpgvector.WithEmbedder(emb),
+		sessionpgvector.WithIndexDimension(emb.GetDimensions()),
+		sessionpgvector.WithSessionEventLimit(cfg.SessionEventLimit),
+		sessionpgvector.WithMaxResults(cfg.SessionRecallResults),
+		sessionpgvector.WithTablePrefix(
+			tableNameWithSuffix(sessionRecallTableBase),
+		),
+		sessionpgvector.WithSyncIndexing(true),
+	)
 }
 
 func createPGVectorService(
