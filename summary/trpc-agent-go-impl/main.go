@@ -344,6 +344,13 @@ func main() {
 		log.Fatalf("Failed to create output directory: %v", err)
 	}
 
+	if detectDatasetFormat(*flagDataset) == "qmsum" {
+		if err := runQMSumBenchmark(modelName, outputDir); err != nil {
+			log.Fatalf("Failed to run QMSum benchmark: %v", err)
+		}
+		return
+	}
+
 	log.Printf("=== Summary Evaluation (τ-bench inspired) ===")
 	log.Printf("Model: %s", modelName)
 	log.Printf("Output: %s", outputDir)
@@ -1284,6 +1291,8 @@ func asFloat64Slice(v any) []float64 {
 }
 
 func intPtr(i int) *int { return &i }
+
+func float64Ptr(v float64) *float64 { return &v }
 
 // truncateStr truncates a string to maxLen characters, replacing newlines.
 func truncateStr(s string, maxLen int) string {
