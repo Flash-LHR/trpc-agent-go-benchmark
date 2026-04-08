@@ -50,14 +50,16 @@ type mtBenchConfig struct {
 }
 
 type qmsumConfig struct {
-	Split             string
-	Domain            string
-	QueryType         string
-	PGVectorDSN       string
-	EmbedModel        string
-	MaxTokens         int
-	MaxToolIterations int
-	SummaryWait       time.Duration
+	Split              string
+	Domain             string
+	QueryType          string
+	PGVectorDSN        string
+	EmbedModel         string
+	MaxTokens          int
+	MaxToolIterations  int
+	SummaryWait        time.Duration
+	VisibleEvents      int
+	MinDistanceFromEnd int
 }
 
 var (
@@ -143,6 +145,16 @@ var (
 		45*time.Second,
 		"Maximum time to wait for session summary generation before querying",
 	)
+	flagQMSumVisibleEvents = flag.Int(
+		"qmsum-visible-events",
+		20,
+		"Number of most recent transcript turns kept directly visible in QMSum summary modes",
+	)
+	flagQMSumMinDistanceFromEnd = flag.Int(
+		"qmsum-min-distance-from-end",
+		0,
+		"Minimum support distance from transcript end for QMSum case selection (0 keeps all cases)",
+	)
 )
 
 func loadAppConfig() (*appConfig, error) {
@@ -174,14 +186,16 @@ func loadAppConfig() (*appConfig, error) {
 			KValues:              kValues,
 		},
 		QMSum: qmsumConfig{
-			Split:             *flagQMSumSplit,
-			Domain:            *flagQMSumDomain,
-			QueryType:         *flagQMSumQueryType,
-			PGVectorDSN:       resolvePGVectorDSN(),
-			EmbedModel:        resolveEmbedModelName(),
-			MaxTokens:         *flagQMSumMaxTokens,
-			MaxToolIterations: *flagQMSumMaxToolIterations,
-			SummaryWait:       *flagQMSumSummaryWait,
+			Split:              *flagQMSumSplit,
+			Domain:             *flagQMSumDomain,
+			QueryType:          *flagQMSumQueryType,
+			PGVectorDSN:        resolvePGVectorDSN(),
+			EmbedModel:         resolveEmbedModelName(),
+			MaxTokens:          *flagQMSumMaxTokens,
+			MaxToolIterations:  *flagQMSumMaxToolIterations,
+			SummaryWait:        *flagQMSumSummaryWait,
+			VisibleEvents:      *flagQMSumVisibleEvents,
+			MinDistanceFromEnd: *flagQMSumMinDistanceFromEnd,
 		},
 	}
 
@@ -217,6 +231,15 @@ func validateAppConfig(cfg *appConfig) error {
 		return fmt.Errorf(
 			"invalid -retention-threshold: %.3f",
 			cfg.MTBench.RetentionThreshold,
+		)
+	}
+	if cfg.QMSum.VisibleEvents <= 0 {
+		return fmt.Errorf("invalid -qmsum-visible-events: %d", cfg.QMSum.VisibleEvents)
+	}
+	if cfg.QMSum.MinDistanceFromEnd < 0 {
+		return fmt.Errorf(
+			"invalid -qmsum-min-distance-from-end: %d",
+			cfg.QMSum.MinDistanceFromEnd,
 		)
 	}
 	return nil

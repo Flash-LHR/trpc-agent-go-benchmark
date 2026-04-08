@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"trpc.group/trpc-go/trpc-agent-go/event"
+	"trpc.group/trpc-go/trpc-agent-go/model"
 )
 
 // TokenUsage stores detailed token usage for a single LLM call.
@@ -24,9 +25,42 @@ type TokenUsage struct {
 	TotalTokens      int `json:"totalTokens"`
 }
 
+// ToolCallStats stores how many times each tool was invoked during one run.
+type ToolCallStats struct {
+	Counts map[string]int `json:"counts,omitempty"`
+}
+
+func (s *ToolCallStats) increment(toolName string) {
+	if s == nil {
+		return
+	}
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		return
+	}
+	if s.Counts == nil {
+		s.Counts = make(map[string]int)
+	}
+	s.Counts[toolName]++
+}
+
+func (s *ToolCallStats) Count(toolName string) int {
+	if s == nil || s.Counts == nil {
+		return 0
+	}
+	return s.Counts[toolName]
+}
+
 func consumeEvents(evtCh <-chan *event.Event) (string, *TokenUsage) {
+	response, usage, _ := consumeEventsWithToolStats(evtCh)
+	return response, usage
+}
+
+func consumeEventsWithToolStats(evtCh <-chan *event.Event) (string, *TokenUsage, *ToolCallStats) {
 	var response strings.Builder
 	usage := &TokenUsage{}
+	toolStats := &ToolCallStats{}
+	seenToolCalls := make(map[string]struct{})
 
 	for evt := range evtCh {
 		if evt.Error != nil {
@@ -40,6 +74,7 @@ func consumeEvents(evtCh <-chan *event.Event) (string, *TokenUsage) {
 			usage.CompletionTokens = evt.Response.Usage.CompletionTokens
 			usage.TotalTokens = evt.Response.Usage.TotalTokens
 		}
+		recordToolCalls(evt.Response, toolStats, seenToolCalls)
 		if len(evt.Response.Choices) == 0 {
 			continue
 		}
@@ -51,7 +86,43 @@ func consumeEvents(evtCh <-chan *event.Event) (string, *TokenUsage) {
 			response.WriteString(choice.Delta.Content)
 		}
 	}
-	return response.String(), usage
+	return response.String(), usage, toolStats
+}
+
+func recordToolCalls(
+	resp *model.Response,
+	toolStats *ToolCallStats,
+	seenToolCalls map[string]struct{},
+) {
+	if resp == nil {
+		return
+	}
+	for _, choice := range resp.Choices {
+		for _, tc := range choice.Message.ToolCalls {
+			recordToolCall(tc, toolStats, seenToolCalls)
+		}
+		for _, tc := range choice.Delta.ToolCalls {
+			recordToolCall(tc, toolStats, seenToolCalls)
+		}
+	}
+}
+
+func recordToolCall(
+	tc model.ToolCall,
+	toolStats *ToolCallStats,
+	seenToolCalls map[string]struct{},
+) {
+	name := strings.TrimSpace(tc.Function.Name)
+	if name == "" {
+		return
+	}
+	if tc.ID != "" {
+		if _, ok := seenToolCalls[tc.ID]; ok {
+			return
+		}
+		seenToolCalls[tc.ID] = struct{}{}
+	}
+	toolStats.increment(name)
 }
 
 func firstNonNil(values ...any) any {

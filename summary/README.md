@@ -69,6 +69,8 @@ go run . \
   -qmsum-query-type specific \
   -num-cases 5 \
   -events 40 \
+  -qmsum-visible-events 20 \
+  -qmsum-min-distance-from-end 80 \
   -qmsum-max-tool-iterations 6
 ```
 
@@ -110,6 +112,8 @@ go run . \
 | `-qmsum-max-tokens` | `384` | Max answer tokens per query |
 | `-qmsum-max-tool-iterations` | `6` | Max tool loops for `summary_ondemand` |
 | `-qmsum-summary-wait` | `45s` | Max wait time for async summary generation |
+| `-qmsum-visible-events` | `20` | Number of most recent transcript turns kept directly visible in `summary` / `summary_ondemand` |
+| `-qmsum-min-distance-from-end` | `0` | Minimum support distance from the transcript end; useful for a harder hidden-detail subset |
 
 ## What Each Dataset Measures
 

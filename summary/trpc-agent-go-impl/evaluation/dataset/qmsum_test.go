@@ -83,3 +83,32 @@ func TestNormalizeQMSumInputs(t *testing.T) {
 		t.Fatalf("normalizeQMSumQueryType should reject invalid query type")
 	}
 }
+
+func TestQMSumCaseSupportWindowAndDistance(t *testing.T) {
+	t.Parallel()
+
+	qcase := &QMSumCase{
+		RelevantTextSpan: [][]string{
+			{"10", "12"},
+			{"4", "5"},
+			{"20", "18"},
+		},
+		Transcript: make([]QMSumTranscriptTurn, 30),
+	}
+
+	start, end, ok := qcase.SupportTurnWindow()
+	if !ok {
+		t.Fatalf("SupportTurnWindow should succeed")
+	}
+	if start != 4 || end != 20 {
+		t.Fatalf("SupportTurnWindow = (%d, %d), want (4, 20)", start, end)
+	}
+
+	distance, ok := qcase.SupportDistanceFromEnd()
+	if !ok {
+		t.Fatalf("SupportDistanceFromEnd should succeed")
+	}
+	if distance != 9 {
+		t.Fatalf("SupportDistanceFromEnd = %d, want 9", distance)
+	}
+}

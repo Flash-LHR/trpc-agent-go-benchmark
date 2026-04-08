@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -58,6 +59,62 @@ type QMSumCase struct {
 	Answer           string
 	RelevantTextSpan [][]string
 	Transcript       []QMSumTranscriptTurn
+}
+
+// SupportTurnWindow returns the earliest and latest referenced transcript turns.
+func (c *QMSumCase) SupportTurnWindow() (int, int, bool) {
+	if c == nil || len(c.RelevantTextSpan) == 0 {
+		return 0, 0, false
+	}
+
+	var (
+		start int
+		end   int
+		ok    bool
+	)
+	for _, span := range c.RelevantTextSpan {
+		if len(span) < 2 {
+			continue
+		}
+		spanStart, err := strconv.Atoi(strings.TrimSpace(span[0]))
+		if err != nil {
+			continue
+		}
+		spanEnd, err := strconv.Atoi(strings.TrimSpace(span[1]))
+		if err != nil {
+			continue
+		}
+		if spanEnd < spanStart {
+			spanStart, spanEnd = spanEnd, spanStart
+		}
+		if spanStart < 0 || spanEnd < 0 {
+			continue
+		}
+		if !ok || spanStart < start {
+			start = spanStart
+		}
+		if !ok || spanEnd > end {
+			end = spanEnd
+		}
+		ok = true
+	}
+	return start, end, ok
+}
+
+// SupportDistanceFromEnd returns how many turns separate the newest support span
+// from the end of the transcript.
+func (c *QMSumCase) SupportDistanceFromEnd() (int, bool) {
+	if c == nil || len(c.Transcript) == 0 {
+		return 0, false
+	}
+	_, end, ok := c.SupportTurnWindow()
+	if !ok {
+		return 0, false
+	}
+	if end >= len(c.Transcript) {
+		end = len(c.Transcript) - 1
+	}
+	return len(c.Transcript) - 1 - end, true
 }
 
 // LoadQMSum loads flattened QMSum cases from <dataDir>/data/<domain>/<split>.

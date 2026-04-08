@@ -144,4 +144,4 @@ echo "  go run . -dataset ../data/mt-bench-101 -dataset-format mtbench101 -task 
 echo
 echo "QMSum:"
 echo "  cd summary/trpc-agent-go-impl"
-echo "  go run . -dataset ../data/QMSum -dataset-format qmsum -qmsum-domain Committee -num-cases 5"
+echo "  go run . -dataset ../data/QMSum -dataset-format qmsum -qmsum-domain Committee -num-cases 5 -qmsum-visible-events 20 -qmsum-min-distance-from-end 80"

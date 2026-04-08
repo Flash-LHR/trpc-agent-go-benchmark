@@ -16,6 +16,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -61,26 +62,35 @@ Rules:
 
 // QMSumModeResult stores one mode's answer, metrics, and token usage.
 type QMSumModeResult struct {
-	Mode             string        `json:"mode"`
-	Answer           string        `json:"answer"`
-	Metrics          *QMSumMetrics `json:"metrics,omitempty"`
-	TokenUsage       *TokenUsage   `json:"token_usage,omitempty"`
-	DurationMs       int64         `json:"duration_ms"`
-	SummaryAvailable bool          `json:"summary_available,omitempty"`
-	SummaryChars     int           `json:"summary_chars,omitempty"`
-	Error            string        `json:"error,omitempty"`
+	Mode                   string        `json:"mode"`
+	Answer                 string        `json:"answer"`
+	Metrics                *QMSumMetrics `json:"metrics,omitempty"`
+	TokenUsage             *TokenUsage   `json:"token_usage,omitempty"`
+	DurationMs             int64         `json:"duration_ms"`
+	SeedDurationMs         int64         `json:"seed_duration_ms,omitempty"`
+	SummaryBuildDurationMs int64         `json:"summary_build_duration_ms,omitempty"`
+	QueryDurationMs        int64         `json:"query_duration_ms,omitempty"`
+	SummaryAvailable       bool          `json:"summary_available,omitempty"`
+	SummaryChars           int           `json:"summary_chars,omitempty"`
+	SessionSearchCalls     int           `json:"session_search_calls,omitempty"`
+	SessionLoadCalls       int           `json:"session_load_calls,omitempty"`
+	Error                  string        `json:"error,omitempty"`
 }
 
 // QMSumCaseResult stores the three-mode comparison for one query.
 type QMSumCaseResult struct {
-	CaseID     string `json:"case_id"`
-	MeetingID  string `json:"meeting_id"`
-	Domain     string `json:"domain"`
-	QueryType  string `json:"query_type"`
-	Query      string `json:"query"`
-	Reference  string `json:"reference"`
-	Turns      int    `json:"turns"`
-	Transcript int    `json:"transcript_chars"`
+	CaseID                 string `json:"case_id"`
+	MeetingID              string `json:"meeting_id"`
+	Domain                 string `json:"domain"`
+	QueryType              string `json:"query_type"`
+	Query                  string `json:"query"`
+	Reference              string `json:"reference"`
+	Turns                  int    `json:"turns"`
+	Transcript             int    `json:"transcript_chars"`
+	SupportWindowAvailable bool   `json:"support_window_available"`
+	SupportStartTurn       int    `json:"support_start_turn"`
+	SupportEndTurn         int    `json:"support_end_turn"`
+	SupportDistanceFromEnd int    `json:"support_distance_from_end"`
 
 	LongContext *QMSumModeResult `json:"long_context,omitempty"`
 	Summary     *QMSumModeResult `json:"summary,omitempty"`
@@ -93,34 +103,43 @@ type QMSumCaseResult struct {
 
 // QMSumAggregate stores averaged metrics for one mode across cases.
 type QMSumAggregate struct {
-	Count               int           `json:"count"`
-	AvgF1               float64       `json:"avg_f1"`
-	AvgBLEU             float64       `json:"avg_bleu"`
-	AvgROUGE1           float64       `json:"avg_rouge_1"`
-	AvgROUGE2           float64       `json:"avg_rouge_2"`
-	AvgROUGEL           float64       `json:"avg_rouge_l"`
-	AvgLLMScore         float64       `json:"avg_llm_score,omitempty"`
-	AvgPromptTokens     float64       `json:"avg_prompt_tokens"`
-	AvgCompletionTokens float64       `json:"avg_completion_tokens"`
-	AvgTotalTokens      float64       `json:"avg_total_tokens"`
-	AvgLatencyMs        float64       `json:"avg_latency_ms"`
-	AvgSummaryChars     float64       `json:"avg_summary_chars,omitempty"`
-	PromptSavingsVsLong float64       `json:"prompt_savings_vs_long,omitempty"`
-	Duration            time.Duration `json:"-"`
+	Count                     int           `json:"count"`
+	AvgF1                     float64       `json:"avg_f1"`
+	AvgBLEU                   float64       `json:"avg_bleu"`
+	AvgROUGE1                 float64       `json:"avg_rouge_1"`
+	AvgROUGE2                 float64       `json:"avg_rouge_2"`
+	AvgROUGEL                 float64       `json:"avg_rouge_l"`
+	AvgLLMScore               float64       `json:"avg_llm_score,omitempty"`
+	AvgPromptTokens           float64       `json:"avg_prompt_tokens"`
+	AvgCompletionTokens       float64       `json:"avg_completion_tokens"`
+	AvgTotalTokens            float64       `json:"avg_total_tokens"`
+	AvgLatencyMs              float64       `json:"avg_latency_ms"`
+	AvgSeedDurationMs         float64       `json:"avg_seed_duration_ms,omitempty"`
+	AvgSummaryBuildDurationMs float64       `json:"avg_summary_build_duration_ms,omitempty"`
+	AvgQueryLatencyMs         float64       `json:"avg_query_latency_ms,omitempty"`
+	AvgSummaryChars           float64       `json:"avg_summary_chars,omitempty"`
+	SummaryAvailableRate      float64       `json:"summary_available_rate,omitempty"`
+	AvgSessionSearchCalls     float64       `json:"avg_session_search_calls,omitempty"`
+	AvgSessionLoadCalls       float64       `json:"avg_session_load_calls,omitempty"`
+	PromptSavingsVsLong       float64       `json:"prompt_savings_vs_long,omitempty"`
+	Duration                  time.Duration `json:"-"`
 }
 
 // QMSumResults is the output JSON payload for QMSum runs.
 type QMSumResults struct {
-	Timestamp      string             `json:"timestamp"`
-	Model          string             `json:"model"`
-	DatasetFormat  string             `json:"dataset_format"`
-	Dataset        string             `json:"dataset"`
-	Split          string             `json:"split"`
-	Domain         string             `json:"domain"`
-	QueryType      string             `json:"query_type"`
-	NumCases       int                `json:"num_cases"`
-	EventThreshold int                `json:"event_threshold"`
-	Cases          []*QMSumCaseResult `json:"cases"`
+	Timestamp          string             `json:"timestamp"`
+	Model              string             `json:"model"`
+	DatasetFormat      string             `json:"dataset_format"`
+	Dataset            string             `json:"dataset"`
+	Split              string             `json:"split"`
+	Domain             string             `json:"domain"`
+	QueryType          string             `json:"query_type"`
+	LoadedCases        int                `json:"loaded_cases"`
+	NumCases           int                `json:"num_cases"`
+	EventThreshold     int                `json:"event_threshold"`
+	VisibleEvents      int                `json:"visible_events"`
+	MinDistanceFromEnd int                `json:"min_distance_from_end"`
+	Cases              []*QMSumCaseResult `json:"cases"`
 
 	LongContext *QMSumAggregate `json:"long_context,omitempty"`
 	Summary     *QMSumAggregate `json:"summary,omitempty"`
@@ -145,10 +164,12 @@ func (b *QMSumBenchmark) Run(ctx context.Context) error {
 		b.cfg.QMSum.Split, b.cfg.QMSum.Domain, b.cfg.QMSum.QueryType)
 	log.Printf("Output: %s", b.cfg.OutputDir)
 	log.Printf("Event Threshold: %d", b.cfg.Events)
+	log.Printf("Visible Events: %d", b.cfg.QMSum.VisibleEvents)
+	log.Printf("Min Support Distance From End: %d", b.cfg.QMSum.MinDistanceFromEnd)
 	log.Printf("LLM Evaluation: %v", b.cfg.UseLLMEval)
 
 	loader := dataset.NewDatasetLoader(b.cfg.DatasetPath)
-	cases, err := loader.LoadQMSum(
+	loadedCases, err := loader.LoadQMSum(
 		b.cfg.QMSum.Split,
 		b.cfg.QMSum.Domain,
 		b.cfg.QMSum.QueryType,
@@ -156,10 +177,16 @@ func (b *QMSumBenchmark) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("load QMSum: %w", err)
 	}
-	if b.cfg.NumCases > 0 && b.cfg.NumCases < len(cases) {
-		cases = cases[:b.cfg.NumCases]
+
+	cases := b.selectQMSumCases(loadedCases)
+	if len(cases) == 0 {
+		return fmt.Errorf(
+			"no QMSum cases remain after filtering (min_distance_from_end=%d)",
+			b.cfg.QMSum.MinDistanceFromEnd,
+		)
 	}
-	log.Printf("Loaded %d QMSum cases", len(cases))
+	log.Printf("Loaded %d QMSum cases, selected %d for evaluation",
+		len(loadedCases), len(cases))
 
 	llm := openai.New(b.cfg.ModelName)
 	var judge *qmsumLLMJudge
@@ -185,16 +212,19 @@ func (b *QMSumBenchmark) Run(ctx context.Context) error {
 	}()
 
 	results := &QMSumResults{
-		Timestamp:      time.Now().Format(time.RFC3339),
-		Model:          b.cfg.ModelName,
-		DatasetFormat:  "qmsum",
-		Dataset:        b.cfg.DatasetPath,
-		Split:          b.cfg.QMSum.Split,
-		Domain:         b.cfg.QMSum.Domain,
-		QueryType:      b.cfg.QMSum.QueryType,
-		NumCases:       len(cases),
-		EventThreshold: b.cfg.Events,
-		Cases:          make([]*QMSumCaseResult, 0, len(cases)),
+		Timestamp:          time.Now().Format(time.RFC3339),
+		Model:              b.cfg.ModelName,
+		DatasetFormat:      "qmsum",
+		Dataset:            b.cfg.DatasetPath,
+		Split:              b.cfg.QMSum.Split,
+		Domain:             b.cfg.QMSum.Domain,
+		QueryType:          b.cfg.QMSum.QueryType,
+		LoadedCases:        len(loadedCases),
+		NumCases:           len(cases),
+		EventThreshold:     b.cfg.Events,
+		VisibleEvents:      b.cfg.QMSum.VisibleEvents,
+		MinDistanceFromEnd: b.cfg.QMSum.MinDistanceFromEnd,
+		Cases:              make([]*QMSumCaseResult, 0, len(cases)),
 	}
 
 	start := time.Now()
@@ -251,6 +281,80 @@ func (b *QMSumBenchmark) Run(ctx context.Context) error {
 	return nil
 }
 
+func (b *QMSumBenchmark) selectQMSumCases(
+	cases []*dataset.QMSumCase,
+) []*dataset.QMSumCase {
+	selected := filterQMSumCasesBySupportDistance(
+		cases,
+		b.cfg.QMSum.MinDistanceFromEnd,
+	)
+	selected = roundRobinQMSumCasesByMeeting(selected)
+	if b.cfg.NumCases > 0 && b.cfg.NumCases < len(selected) {
+		selected = selected[:b.cfg.NumCases]
+	}
+	return selected
+}
+
+func filterQMSumCasesBySupportDistance(
+	cases []*dataset.QMSumCase,
+	minDistance int,
+) []*dataset.QMSumCase {
+	if minDistance <= 0 {
+		return append([]*dataset.QMSumCase(nil), cases...)
+	}
+
+	filtered := make([]*dataset.QMSumCase, 0, len(cases))
+	for _, qcase := range cases {
+		distance, ok := qcase.SupportDistanceFromEnd()
+		if ok && distance >= minDistance {
+			filtered = append(filtered, qcase)
+		}
+	}
+	return filtered
+}
+
+func roundRobinQMSumCasesByMeeting(
+	cases []*dataset.QMSumCase,
+) []*dataset.QMSumCase {
+	if len(cases) <= 1 {
+		return append([]*dataset.QMSumCase(nil), cases...)
+	}
+
+	grouped := make(map[string][]*dataset.QMSumCase)
+	meetingIDs := make([]string, 0)
+	for _, qcase := range cases {
+		if qcase == nil {
+			continue
+		}
+		if _, ok := grouped[qcase.MeetingID]; !ok {
+			meetingIDs = append(meetingIDs, qcase.MeetingID)
+		}
+		grouped[qcase.MeetingID] = append(grouped[qcase.MeetingID], qcase)
+	}
+
+	sort.Strings(meetingIDs)
+	for _, meetingID := range meetingIDs {
+		sort.Slice(grouped[meetingID], func(i, j int) bool {
+			return grouped[meetingID][i].CaseID < grouped[meetingID][j].CaseID
+		})
+	}
+
+	ordered := make([]*dataset.QMSumCase, 0, len(cases))
+	for added := true; added; {
+		added = false
+		for _, meetingID := range meetingIDs {
+			bucket := grouped[meetingID]
+			if len(bucket) == 0 {
+				continue
+			}
+			ordered = append(ordered, bucket[0])
+			grouped[meetingID] = bucket[1:]
+			added = true
+		}
+	}
+	return ordered
+}
+
 func (b *QMSumBenchmark) createQMSumSummaryService(
 	llm model.Model,
 ) (session.Service, error) {
@@ -271,8 +375,9 @@ func (b *QMSumBenchmark) createQMSumSummaryService(
 	)
 
 	log.Printf(
-		"Creating QMSum pgvector session service (embed_model=%s)",
+		"Creating QMSum pgvector session service (embed_model=%s, visible_events=%d)",
 		embedModelName,
+		b.cfg.QMSum.VisibleEvents,
 	)
 
 	return sessionpgvector.NewService(
@@ -280,7 +385,7 @@ func (b *QMSumBenchmark) createQMSumSummaryService(
 		sessionpgvector.WithEmbedder(emb),
 		sessionpgvector.WithIndexDimension(emb.GetDimensions()),
 		sessionpgvector.WithTablePrefix(qmsumTablePrefix),
-		sessionpgvector.WithSessionEventLimit(0),
+		sessionpgvector.WithSessionEventLimit(b.cfg.QMSum.VisibleEvents),
 		sessionpgvector.WithSyncIndexing(true),
 		sessionpgvector.WithMaxResults(10),
 		sessionpgvector.WithSummarizer(sum),
@@ -323,18 +428,28 @@ func (b *QMSumBenchmark) evaluateQMSumCase(
 		return nil, fmt.Errorf("summary_ondemand: %w", err)
 	}
 
+	supportStart, supportEnd, supportOK := qcase.SupportTurnWindow()
+	supportDistance, distanceOK := qcase.SupportDistanceFromEnd()
+	if !distanceOK {
+		supportDistance = 0
+	}
+
 	result := &QMSumCaseResult{
-		CaseID:      qcase.CaseID,
-		MeetingID:   qcase.MeetingID,
-		Domain:      qcase.Domain,
-		QueryType:   qcase.QueryType,
-		Query:       qcase.Query,
-		Reference:   qcase.Answer,
-		Turns:       len(qcase.Transcript),
-		Transcript:  transcriptCharCount(qcase.Transcript),
-		LongContext: longResult,
-		Summary:     summaryResult,
-		OnDemand:    onDemandResult,
+		CaseID:                 qcase.CaseID,
+		MeetingID:              qcase.MeetingID,
+		Domain:                 qcase.Domain,
+		QueryType:              qcase.QueryType,
+		Query:                  qcase.Query,
+		Reference:              qcase.Answer,
+		Turns:                  len(qcase.Transcript),
+		Transcript:             transcriptCharCount(qcase.Transcript),
+		SupportWindowAvailable: supportOK,
+		SupportStartTurn:       supportStart,
+		SupportEndTurn:         supportEnd,
+		SupportDistanceFromEnd: supportDistance,
+		LongContext:            longResult,
+		Summary:                summaryResult,
+		OnDemand:               onDemandResult,
 	}
 	if longResult != nil && summaryResult != nil &&
 		longResult.TokenUsage != nil && summaryResult.TokenUsage != nil &&
@@ -366,7 +481,7 @@ func (b *QMSumBenchmark) runQMSumMode(
 	qcase *dataset.QMSumCase,
 	mode qmsumRunMode,
 ) (*QMSumModeResult, error) {
-	start := time.Now()
+	totalStart := time.Now()
 	appName := qmsumAppName(mode)
 	userID := qcase.CaseID
 	sessionID := fmt.Sprintf("%s-%s", string(mode), qcase.CaseID)
@@ -380,26 +495,29 @@ func (b *QMSumBenchmark) runQMSumMode(
 		_ = svc.DeleteSession(context.Background(), key)
 	}()
 
+	seedStart := time.Now()
 	sess, err := seedQMSumTranscript(ctx, svc, key, qcase)
+	seedDurationMs := time.Since(seedStart).Milliseconds()
 	if err != nil {
 		return nil, fmt.Errorf("seed transcript: %w", err)
 	}
 
 	var (
-		summaryText      string
-		summaryAvailable bool
+		summaryText            string
+		summaryAvailable       bool
+		summaryBuildDurationMs int64
 	)
 	if mode == qmsumModeSummary || mode == qmsumModeOnDemand {
-		summaryText, summaryAvailable, err = b.waitForQMSumSummary(
-			ctx, svc, key,
+		summaryStart := time.Now()
+		sess, summaryText, summaryAvailable, err = b.ensureQMSumSummary(
+			ctx, svc, key, sess,
 		)
+		summaryBuildDurationMs = time.Since(summaryStart).Milliseconds()
 		if err != nil {
-			return nil, fmt.Errorf("wait for summary: %w", err)
+			return nil, fmt.Errorf("prepare session summary: %w", err)
 		}
-		// Refresh session before runner starts so invocation sees summaries.
-		sess, err = svc.GetSession(ctx, key)
-		if err != nil {
-			return nil, fmt.Errorf("refresh session: %w", err)
+		if !summaryAvailable {
+			return nil, fmt.Errorf("session summary unavailable after force build")
 		}
 	}
 	_ = sess
@@ -408,26 +526,36 @@ func (b *QMSumBenchmark) runQMSumMode(
 	r := runner.NewRunner(appName, ag, runner.WithSessionService(svc))
 	defer r.Close()
 
+	queryStart := time.Now()
 	evtCh, err := r.Run(ctx, userID, sessionID, model.NewUserMessage(qcase.Query))
 	if err != nil {
 		return &QMSumModeResult{
-			Mode:             string(mode),
-			DurationMs:       time.Since(start).Milliseconds(),
-			SummaryAvailable: summaryAvailable,
-			SummaryChars:     len(summaryText),
-			Error:            err.Error(),
+			Mode:                   string(mode),
+			DurationMs:             time.Since(totalStart).Milliseconds(),
+			SeedDurationMs:         seedDurationMs,
+			SummaryBuildDurationMs: summaryBuildDurationMs,
+			QueryDurationMs:        time.Since(queryStart).Milliseconds(),
+			SummaryAvailable:       summaryAvailable,
+			SummaryChars:           len(summaryText),
+			Error:                  err.Error(),
 		}, err
 	}
 
-	answer, usage := consumeEvents(evtCh)
+	answer, usage, toolStats := consumeEventsWithToolStats(evtCh)
+	queryDurationMs := time.Since(queryStart).Milliseconds()
 	return &QMSumModeResult{
-		Mode:             string(mode),
-		Answer:           strings.TrimSpace(answer),
-		Metrics:          evaluateQMSumMetrics(ctx, judge, qcase.Query, qcase.Answer, answer),
-		TokenUsage:       usage,
-		DurationMs:       time.Since(start).Milliseconds(),
-		SummaryAvailable: summaryAvailable,
-		SummaryChars:     len(summaryText),
+		Mode:                   string(mode),
+		Answer:                 strings.TrimSpace(answer),
+		Metrics:                evaluateQMSumMetrics(ctx, judge, qcase.Query, qcase.Answer, answer),
+		TokenUsage:             usage,
+		DurationMs:             time.Since(totalStart).Milliseconds(),
+		SeedDurationMs:         seedDurationMs,
+		SummaryBuildDurationMs: summaryBuildDurationMs,
+		QueryDurationMs:        queryDurationMs,
+		SummaryAvailable:       summaryAvailable,
+		SummaryChars:           len(summaryText),
+		SessionSearchCalls:     toolStats.Count("session_search"),
+		SessionLoadCalls:       toolStats.Count("session_load"),
 	}, nil
 }
 
@@ -491,8 +619,6 @@ func seedQMSumTranscript(
 			strings.TrimSpace(turn.Speaker),
 			strings.TrimSpace(turn.Content),
 		)
-		// Store transcript turns as user-side history so the seeded session
-		// remains visible to backends that expect history to start with a user event.
 		evt := event.New(
 			fmt.Sprintf("%s-%04d", key.SessionID, i),
 			"qmsum-seed",
@@ -514,6 +640,40 @@ func seedQMSumTranscript(
 		}
 	}
 	return sess, nil
+}
+
+func (b *QMSumBenchmark) ensureQMSumSummary(
+	ctx context.Context,
+	svc session.Service,
+	key session.Key,
+	sess *session.Session,
+) (*session.Session, string, bool, error) {
+	if err := svc.CreateSessionSummary(
+		ctx,
+		sess,
+		session.SummaryFilterKeyAllContents,
+		true,
+	); err != nil {
+		return nil, "", false, fmt.Errorf("force summary build: %w", err)
+	}
+
+	if text, ok := svc.GetSessionSummaryText(ctx, sess); ok && strings.TrimSpace(text) != "" {
+		refreshed, err := svc.GetSession(ctx, key)
+		if err != nil {
+			return nil, "", false, fmt.Errorf("refresh session: %w", err)
+		}
+		return refreshed, text, true, nil
+	}
+
+	text, ok, err := b.waitForQMSumSummary(ctx, svc, key)
+	if err != nil {
+		return nil, "", false, err
+	}
+	refreshed, refreshErr := svc.GetSession(ctx, key)
+	if refreshErr != nil {
+		return nil, "", false, fmt.Errorf("refresh session: %w", refreshErr)
+	}
+	return refreshed, text, ok, nil
 }
 
 func (b *QMSumBenchmark) waitForQMSumSummary(
@@ -583,6 +743,7 @@ func aggregateQMSumMode(
 	mode qmsumRunMode,
 ) *QMSumAggregate {
 	agg := &QMSumAggregate{}
+	var summaryAvailableCount int
 	for _, cr := range cases {
 		var mr *QMSumModeResult
 		switch mode {
@@ -610,7 +771,15 @@ func aggregateQMSumMode(
 		agg.AvgCompletionTokens += float64(mr.TokenUsage.CompletionTokens)
 		agg.AvgTotalTokens += float64(mr.TokenUsage.TotalTokens)
 		agg.AvgLatencyMs += float64(mr.DurationMs)
+		agg.AvgSeedDurationMs += float64(mr.SeedDurationMs)
+		agg.AvgSummaryBuildDurationMs += float64(mr.SummaryBuildDurationMs)
+		agg.AvgQueryLatencyMs += float64(mr.QueryDurationMs)
 		agg.AvgSummaryChars += float64(mr.SummaryChars)
+		agg.AvgSessionSearchCalls += float64(mr.SessionSearchCalls)
+		agg.AvgSessionLoadCalls += float64(mr.SessionLoadCalls)
+		if mr.SummaryAvailable {
+			summaryAvailableCount++
+		}
 	}
 	if agg.Count == 0 {
 		return agg
@@ -627,7 +796,13 @@ func aggregateQMSumMode(
 	agg.AvgCompletionTokens /= n
 	agg.AvgTotalTokens /= n
 	agg.AvgLatencyMs /= n
+	agg.AvgSeedDurationMs /= n
+	agg.AvgSummaryBuildDurationMs /= n
+	agg.AvgQueryLatencyMs /= n
 	agg.AvgSummaryChars /= n
+	agg.AvgSessionSearchCalls /= n
+	agg.AvgSessionLoadCalls /= n
+	agg.SummaryAvailableRate = float64(summaryAvailableCount) / n
 	return agg
 }
 
@@ -650,8 +825,10 @@ func printQMSumResults(results *QMSumResults) {
 	fmt.Println("Summary Evaluation Results (QMSum)")
 	fmt.Println(strings.Repeat("=", 72))
 	fmt.Printf("Model: %s\n", results.Model)
-	fmt.Printf("Cases: %d | Split: %s | Domain: %s | QueryType: %s\n",
-		results.NumCases, results.Split, results.Domain, results.QueryType)
+	fmt.Printf("Cases: %d/%d | Split: %s | Domain: %s | QueryType: %s\n",
+		results.NumCases, results.LoadedCases, results.Split, results.Domain, results.QueryType)
+	fmt.Printf("Visible Events: %d | Min Support Distance From End: %d\n",
+		results.VisibleEvents, results.MinDistanceFromEnd)
 
 	printQMSumAggregate("Long Context", results.LongContext)
 	printQMSumAggregate("Summary", results.Summary)
@@ -676,9 +853,19 @@ func printQMSumAggregate(title string, agg *QMSumAggregate) {
 	}
 	fmt.Printf("Avg Tokens (prompt/completion/total): %.0f / %.0f / %.0f\n",
 		agg.AvgPromptTokens, agg.AvgCompletionTokens, agg.AvgTotalTokens)
-	fmt.Printf("Avg Latency: %.0f ms\n", agg.AvgLatencyMs)
-	if agg.AvgSummaryChars > 0 {
-		fmt.Printf("Avg Summary Chars: %.0f\n", agg.AvgSummaryChars)
+	fmt.Printf("Avg Latency (total/query): %.0f ms / %.0f ms\n",
+		agg.AvgLatencyMs, agg.AvgQueryLatencyMs)
+	if agg.AvgSeedDurationMs > 0 || agg.AvgSummaryBuildDurationMs > 0 {
+		fmt.Printf("Avg Prep (seed/summary): %.0f ms / %.0f ms\n",
+			agg.AvgSeedDurationMs, agg.AvgSummaryBuildDurationMs)
+	}
+	if agg.AvgSummaryChars > 0 || agg.SummaryAvailableRate > 0 {
+		fmt.Printf("Summary Available Rate: %.2f%% | Avg Summary Chars: %.0f\n",
+			100*agg.SummaryAvailableRate, agg.AvgSummaryChars)
+	}
+	if agg.AvgSessionSearchCalls > 0 || agg.AvgSessionLoadCalls > 0 {
+		fmt.Printf("Avg Tool Calls (search/load): %.2f / %.2f\n",
+			agg.AvgSessionSearchCalls, agg.AvgSessionLoadCalls)
 	}
 	if agg.PromptSavingsVsLong != 0 {
 		fmt.Printf("Prompt Savings vs Long Context: %.2f%%\n", agg.PromptSavingsVsLong)
@@ -687,36 +874,55 @@ func printQMSumAggregate(title string, agg *QMSumAggregate) {
 
 func logQMSumCaseResult(cr *QMSumCaseResult) {
 	log.Printf("  Query: %s", truncateStr(cr.Query, 180))
+	if cr.SupportWindowAvailable {
+		log.Printf("  Support turns: %d-%d | distance_from_end=%d",
+			cr.SupportStartTurn, cr.SupportEndTurn, cr.SupportDistanceFromEnd)
+	}
 	if cr.LongContext != nil && cr.LongContext.Metrics != nil && cr.LongContext.TokenUsage != nil {
-		log.Printf("  LongContext     R-L=%.4f p=%d c=%d t=%d",
+		log.Printf("  LongContext       R-L=%.4f p=%d c=%d t=%d total=%dms query=%dms",
 			cr.LongContext.Metrics.ROUGEL,
 			cr.LongContext.TokenUsage.PromptTokens,
 			cr.LongContext.TokenUsage.CompletionTokens,
 			cr.LongContext.TokenUsage.TotalTokens,
+			cr.LongContext.DurationMs,
+			cr.LongContext.QueryDurationMs,
 		)
 	}
 	if cr.Summary != nil && cr.Summary.Metrics != nil && cr.Summary.TokenUsage != nil {
-		log.Printf("  Summary         R-L=%.4f p=%d c=%d t=%d saved=%.2f%%",
+		log.Printf("  Summary           R-L=%.4f p=%d c=%d t=%d saved=%.2f%% summary=%v chars=%d total=%dms query=%dms",
 			cr.Summary.Metrics.ROUGEL,
 			cr.Summary.TokenUsage.PromptTokens,
 			cr.Summary.TokenUsage.CompletionTokens,
 			cr.Summary.TokenUsage.TotalTokens,
 			cr.SummaryPromptSavings,
+			cr.Summary.SummaryAvailable,
+			cr.Summary.SummaryChars,
+			cr.Summary.DurationMs,
+			cr.Summary.QueryDurationMs,
 		)
 	}
 	if cr.OnDemand != nil && cr.OnDemand.Metrics != nil && cr.OnDemand.TokenUsage != nil {
-		log.Printf("  Summary+OnDemand R-L=%.4f p=%d c=%d t=%d saved=%.2f%% gain=%.4f",
+		log.Printf("  Summary+OnDemand  R-L=%.4f p=%d c=%d t=%d saved=%.2f%% gain=%.4f tools=(%d/%d) total=%dms query=%dms",
 			cr.OnDemand.Metrics.ROUGEL,
 			cr.OnDemand.TokenUsage.PromptTokens,
 			cr.OnDemand.TokenUsage.CompletionTokens,
 			cr.OnDemand.TokenUsage.TotalTokens,
 			cr.OnDemandPromptSavings,
 			cr.OnDemandROUGELGain,
+			cr.OnDemand.SessionSearchCalls,
+			cr.OnDemand.SessionLoadCalls,
+			cr.OnDemand.DurationMs,
+			cr.OnDemand.QueryDurationMs,
 		)
 	}
 }
 
 func saveQMSumCaseLog(outputDir string, cr *QMSumCaseResult) {
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		log.Printf("mkdir QMSum output dir: %v", err)
+		return
+	}
+
 	path := filepath.Join(outputDir, cr.CaseID+".log")
 	f, err := os.Create(path)
 	if err != nil {
@@ -731,8 +937,13 @@ func saveQMSumCaseLog(outputDir string, cr *QMSumCaseResult) {
 		}
 		fmt.Fprintf(f, "=== %s ===\n", title)
 		fmt.Fprintf(f, "Duration: %dms\n", mr.DurationMs)
+		fmt.Fprintf(f, "SeedDuration: %dms\n", mr.SeedDurationMs)
+		fmt.Fprintf(f, "SummaryBuildDuration: %dms\n", mr.SummaryBuildDurationMs)
+		fmt.Fprintf(f, "QueryDuration: %dms\n", mr.QueryDurationMs)
 		fmt.Fprintf(f, "SummaryAvailable: %v\n", mr.SummaryAvailable)
 		fmt.Fprintf(f, "SummaryChars: %d\n", mr.SummaryChars)
+		fmt.Fprintf(f, "ToolCalls: session_search=%d session_load=%d\n",
+			mr.SessionSearchCalls, mr.SessionLoadCalls)
 		if mr.TokenUsage != nil {
 			fmt.Fprintf(f, "Tokens: prompt=%d completion=%d total=%d\n",
 				mr.TokenUsage.PromptTokens,
@@ -754,6 +965,10 @@ func saveQMSumCaseLog(outputDir string, cr *QMSumCaseResult) {
 
 	fmt.Fprintf(f, "CaseID: %s\nMeetingID: %s\nDomain: %s\nQueryType: %s\n\n",
 		cr.CaseID, cr.MeetingID, cr.Domain, cr.QueryType)
+	fmt.Fprintf(f, "Turns: %d\nTranscriptChars: %d\n", cr.Turns, cr.Transcript)
+	fmt.Fprintf(f, "SupportWindowAvailable: %v\n", cr.SupportWindowAvailable)
+	fmt.Fprintf(f, "SupportTurns: %d-%d\n", cr.SupportStartTurn, cr.SupportEndTurn)
+	fmt.Fprintf(f, "SupportDistanceFromEnd: %d\n\n", cr.SupportDistanceFromEnd)
 	fmt.Fprintf(f, "Query:\n%s\n\nReference:\n%s\n\n",
 		cr.Query, cr.Reference)
 	writeMode("LONG CONTEXT", cr.LongContext)
@@ -762,6 +977,11 @@ func saveQMSumCaseLog(outputDir string, cr *QMSumCaseResult) {
 }
 
 func saveQMSumResults(outputDir string, results *QMSumResults) {
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		log.Printf("mkdir QMSum output dir: %v", err)
+		return
+	}
+
 	path := filepath.Join(outputDir, "results.json")
 	data, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {
@@ -776,6 +996,11 @@ func saveQMSumResults(outputDir string, results *QMSumResults) {
 }
 
 func saveQMSumCheckpoint(outputDir string, results *QMSumResults) {
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		log.Printf("mkdir QMSum output dir: %v", err)
+		return
+	}
+
 	path := filepath.Join(outputDir, "checkpoint.json")
 	data, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {

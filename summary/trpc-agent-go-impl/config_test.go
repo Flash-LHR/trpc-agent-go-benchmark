@@ -72,3 +72,26 @@ func TestParseKValues(t *testing.T) {
 		t.Fatalf("parseKValues should reject zero")
 	}
 }
+
+func TestValidateAppConfigRejectsInvalidQMSumFlags(t *testing.T) {
+	t.Parallel()
+
+	cfg := &appConfig{
+		ModelName:     "gpt-4o-mini",
+		DatasetPath:   "/tmp/QMSum",
+		DatasetFormat: datasetFormatQMSum,
+		QMSum: qmsumConfig{
+			VisibleEvents:      0,
+			MinDistanceFromEnd: -1,
+		},
+		MTBench: mtBenchConfig{
+			NumRuns:              1,
+			ConsistencyThreshold: 0.7,
+			RetentionThreshold:   0.7,
+		},
+	}
+
+	if err := validateAppConfig(cfg); err == nil {
+		t.Fatalf("validateAppConfig should reject invalid QMSum flags")
+	}
+}
