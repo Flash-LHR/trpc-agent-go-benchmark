@@ -1,177 +1,141 @@
 # Session Summary Benchmark for trpc-agent-go
 
-This benchmark evaluates the effectiveness of session summarization in trpc-agent-go, inspired by τ-bench and τ²-bench methodologies.
+This benchmark suite evaluates session-summary behavior in two complementary settings:
+
+- `MT-Bench-101`: baseline vs summary on multi-turn dialogue quality
+- `QMSum`: `long_context` vs `summary` vs `summary_ondemand` on long-meeting detail recovery
+
+## Repository Layout
+
+```text
+summary/
+├── README.md
+├── data/
+│   ├── download_datasets.sh
+│   └── README.md
+├── results/
+└── trpc-agent-go-impl/
+    ├── main.go
+    ├── config.go
+    ├── benchmark.go
+    ├── mtbench.go
+    ├── qmsum.go
+    └── evaluation/
+        ├── dataset/
+        └── evaluator/
+```
+
+## Setup
+
+This benchmark module is wired to the local `my-trpc-agent-go` checkout through a relative `replace` in [go.mod](trpc-agent-go-impl/go.mod). The expected workspace layout is:
+
+```text
+/workspace/github/
+├── my-trpc-agent-go
+└── my-trpc-agent-go-benchmark
+```
 
 ## Quick Start
 
+### 1. Download datasets
+
 ```bash
-# 1. Download dataset.
 cd summary/data
 ./download_datasets.sh
+```
 
-# 2. Run evaluation (example: Context Memory task with 10 cases).
+### 2. Run MT-Bench-101
+
+```bash
 cd ../trpc-agent-go-impl
-go run . -task CM -num-cases 10 -llm-eval -verbose
+go run . \
+  -dataset ../data/mt-bench-101 \
+  -dataset-format mtbench101 \
+  -task CM \
+  -num-cases 10 \
+  -llm-eval
 ```
 
-## Directory Structure
-
-```
-summary/
-├── README.md                    # This file
-├── data/                        # Dataset directory
-│   ├── download_datasets.sh     # Dataset download script
-│   └── mt-bench-101/            # MT-Bench-101 dataset (after download)
-├── results/                     # Evaluation results output directory
-│   ├── REPORT.md                # Evaluation report (English)
-│   └── REPORT.zh_CN.md          # Evaluation report (Chinese)
-└── trpc-agent-go-impl/          # Evaluation program implementation
-    ├── main.go
-    ├── go.mod
-    ├── go.sum
-    └── evaluation/              # Evaluation utilities
-        ├── dataset/             # Dataset loader
-        └── evaluator/           # Evaluation metrics
-```
-
-## Evaluation Dimensions
-
-| Dimension | Weight | Description |
-|-----------|--------|-------------|
-| Response Consistency | 50% | Pass^k evaluation for semantic equivalence |
-| Token Efficiency | 30% | Token savings from summarization |
-| Information Retention | 20% | Key information preservation check |
-
-## Running the Evaluation
-
-### Example Commands
+### 3. Run QMSum
 
 ```bash
-cd summary/trpc-agent-go-impl
-
-# Run a single task with LLM evaluation.
-go run . -task CM -llm-eval
-
-# Run multiple tasks.
-go run . -task CM,GR,IC -llm-eval
-
-# Run with custom output directory and verbose logging.
-go run . -task CC -output ../results/mt-bench-101/CC -llm-eval -verbose
-
-# Run in background (recommended for full evaluation).
-nohup go run . -task GR -output ../results/mt-bench-101/GR \
-    -llm-eval > ../results/mt-bench-101/GR/run.log 2>&1 &
-
-# Run all tasks (warning: takes several hours).
-go run . -llm-eval -output ../results/all
-
-# Resume from checkpoint after interruption.
-go run . -task CM -output ../results/mt-bench-101/CM -resume -llm-eval
+cd ../trpc-agent-go-impl
+PGVECTOR_DSN='postgres://USER:PASSWORD@HOST:5432/DB?sslmode=disable' \
+go run . \
+  -dataset ../data/QMSum \
+  -dataset-format qmsum \
+  -qmsum-split test \
+  -qmsum-domain Committee \
+  -qmsum-query-type specific \
+  -num-cases 5 \
+  -events 40 \
+  -qmsum-max-tool-iterations 6
 ```
 
-### Command Line Arguments
+## CLI Overview
 
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `-model` | `gpt-4o-mini` | Model name (uses `MODEL_NAME` env var if set) |
-| `-dataset` | `../data/mt-bench-101` | Path to MT-Bench-101 dataset directory |
-| `-task` | `""` | Filter by task codes (comma-separated, e.g., `CM,GR`) |
-| `-num-cases` | `0` | Number of test cases per task (0 = all) |
-| `-num-runs` | `1` | Runs per case for Pass^k consistency |
-| `-output` | `../results` | Output directory for results |
-| `-events` | `2` | Event threshold for triggering summarization |
-| `-llm-eval` | `false` | Enable LLM-based semantic evaluation |
-| `-verbose` | `false` | Print full conversation content |
-| `-resume` | `false` | Resume from previous checkpoint |
-| `-consistency-threshold` | `0.7` | Threshold for consistency pass/fail |
-| `-retention-threshold` | `0.7` | Threshold for retention pass/fail |
-| `-k-values` | `1,2,4` | Pass^k k values (comma-separated) |
+### Common Flags
 
-### Environment Variables
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-model` | `gpt-4o-mini` | Model name (`MODEL_NAME` overrides default) |
+| `-dataset` | `../data/mt-bench-101` | Dataset path |
+| `-dataset-format` | auto | `mtbench101` or `qmsum` |
+| `-num-cases` | `0` | Number of cases to run (`0` = all) |
+| `-output` | `../results` | Output directory |
+| `-events` | `2` | Summary trigger event threshold |
+| `-llm-eval` | `false` | Enable LLM-based evaluation where supported |
+| `-resume` | `false` | Resume from checkpoint |
+| `-verbose` | `false` | Print detailed conversation logs |
 
-```bash
-# Set model name (takes precedence over default).
-export MODEL_NAME=deepseek-v3.2
+### MT-Bench-101 Flags
 
-# Configure API endpoint (if using custom provider).
-export OPENAI_BASE_URL=https://api.example.com/v1
-export OPENAI_API_KEY=your-api-key
-```
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-task` | `""` | Task filter like `CM,GR` |
+| `-num-runs` | `1` | Runs per mode for Pass^k |
+| `-consistency-threshold` | `0.7` | Pass/fail threshold for consistency |
+| `-retention-threshold` | `0.7` | Pass/fail threshold for retention |
+| `-k-values` | `1,2,4` | Pass^k values |
 
-## MT-Bench-101 Task Codes
+### QMSum Flags
 
-| Code | Full Name | Cases | Description |
-|------|-----------|------:|-------------|
-| AR | Anaphora Resolution | 153 | Identify pronoun referents throughout a multi-turn dialogue. |
-| CC | Content Confusion | 147 | Avoid interference from similar-looking queries with distinct meanings. |
-| CM | Context Memory | 80 | Recall early dialogue details to address the user's current question. |
-| CR | Content Rephrasing | 136 | Rephrase the content of the last response per user's requirement. |
-| FR | Format Rephrasing | 74 | Rephrase the format of the last response per user's requirement. |
-| GR | General Reasoning | 71 | Collaboratively solve complex reasoning problems across turns. |
-| IC | Instruction Clarification | 150 | Seek clarification by asking further questions on ambiguous queries. |
-| MR | Mathematical Reasoning | 108 | Collaboratively solve complex mathematical problems across turns. |
-| PI | Proactive Interaction | 87 | Propose questions to spark user's interest to continue the dialogue. |
-| SA | Self-affirmation | 73 | Preserve the last response against inaccurate user feedback. |
-| SC | Self-correction | 77 | Correct the last response according to user feedback. |
-| SI | Separate Input | 149 | First turn outlines task requirements, following turns specify input. |
-| TS | Topic Shift | 83 | Recognize and focus on new topic when users switch topics. |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-qmsum-split` | `test` | Dataset split |
+| `-qmsum-domain` | `ALL` | `ALL`, `Academic`, `Committee`, or `Product` |
+| `-qmsum-query-type` | `specific` | `specific`, `general`, or `all` |
+| `-pgvector-dsn` | env | PostgreSQL DSN for `summary` / `summary_ondemand` |
+| `-embed-model` | env / `text-embedding-3-small` | Embedding model name |
+| `-qmsum-max-tokens` | `384` | Max answer tokens per query |
+| `-qmsum-max-tool-iterations` | `6` | Max tool loops for `summary_ondemand` |
+| `-qmsum-summary-wait` | `45s` | Max wait time for async summary generation |
 
-**Total**: 1388 dialogues, 4208 turns across 13 tasks.
+## What Each Dataset Measures
 
-## Output Format
+### MT-Bench-101
 
-Results are saved in JSON format with the following structure:
+Best for overall multi-turn quality regression:
 
-```json
-{
-  "timestamp": "2026-01-23T15:08:45+08:00",
-  "model": "deepseek-v3.2",
-  "numCases": 147,
-  "numRuns": 1,
-  "caseResults": [
-    {
-      "caseId": "CC_557",
-      "tokenEfficiency": {
-        "baselineTokens": 2138,
-        "summaryTokens": 2245,
-        "savingsPercentage": -5.00,
-        "promptSavingsPercentage": -25.34
-      },
-      "consistency": {
-        "score": 0.88,
-        "passHat1": 1,
-        "consistencyLevel": "medium"
-      },
-      "retention": {
-        "retentionRate": 0.875,
-        "keyInfoCount": 10,
-        "retainedCount": 8
-      }
-    }
-  ]
-}
-```
+- token savings
+- prompt savings
+- response consistency
+- information retention
 
-## Benchmark Results Summary
+### QMSum
 
-Latest evaluation results (deepseek-v3.2, 627 cases):
+Best for testing whether on-demand session retrieval can recover details that summary no longer keeps in the prompt:
 
-| Task | Token Savings | Prompt Savings | Consistency | Retention | Pass^1 |
-|------|-------------:|---------------:|------------:|----------:|-------:|
-| CC | -27.10% | -17.44% | 0.86 | 0.86 | 89.1% |
-| CM | +13.68% | +25.50% | 0.82 | 0.82 | 96.2% |
-| GR | +13.95% | +15.20% | 1.00 | 1.00 | 100.0% |
-| IC | -0.63% | -0.44% | 0.85 | 0.82 | 95.3% |
-| PI | -28.32% | -1.43% | 0.81 | 0.70 | 96.6% |
-| SC | -1.78% | -0.74% | 0.88 | 0.87 | 93.5% |
-| TS | -0.99% | -1.01% | 0.85 | 0.85 | 95.2% |
-| **Avg** | **-8.97%** | **-1.29%** | **0.85** | **0.83** | **93.9%** |
+- answer quality under `long_context`
+- degradation under `summary`
+- recovery under `summary_ondemand`
 
-See [results/REPORT.md](results/REPORT.md) for detailed analysis.
+## Results
 
-## References
+Results are written to the chosen output directory as:
 
-- [MT-Bench-101 Paper (ACL 2024)](https://arxiv.org/abs/2402.14762)
-- [τ-bench Paper](https://arxiv.org/abs/2406.12045)
-- [τ²-bench Paper](https://arxiv.org/abs/2506.07982)
-- [trpc-agent-go GitHub](https://github.com/trpc-group/trpc-agent-go)
+- `results.json`
+- `checkpoint.json`
+- per-case `*.log`
+
+See [results/REPORT.md](results/REPORT.md) and [results/REPORT.zh_CN.md](results/REPORT.zh_CN.md) for previous reports and analysis context.

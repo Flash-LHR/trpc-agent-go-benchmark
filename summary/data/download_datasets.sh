@@ -1,59 +1,147 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
-# Download evaluation datasets for session summary testing.
+# Download evaluation datasets for summary benchmarking.
 #
-# MT-Bench-101 is a multi-turn dialogue benchmark with user-assistant pairs,
-# ideal for evaluating session summary effectiveness.
-#
-# Reference: MT-Bench-101: A Fine-Grained Benchmark for Evaluating Large
-# Language Models in Multi-Turn Dialogues (ACL 2024).
+# Supported datasets:
+#   - MT-Bench-101: multi-turn dialogue benchmark for baseline vs summary
+#   - QMSum: long-meeting benchmark for long_context / summary / summary_ondemand
 #
 
-set -e
+set -euo pipefail
 
-# Default to current directory (summary/data/).
-DATA_DIR="${1:-.}"
-mkdir -p "$DATA_DIR"
+DATASET_SELECTOR="${1:-all}"
+DATA_DIR="${2:-.}"
 
-echo "=== Downloading MT-Bench-101 dataset ==="
-echo "Data directory: $DATA_DIR"
-echo
+print_usage() {
+    cat <<'EOF'
+Usage:
+  ./download_datasets.sh [all|mtbench101|qmsum] [data_dir]
 
-MTBENCH_DIR="$DATA_DIR/mt-bench-101"
-if [ -d "$MTBENCH_DIR" ] && [ -f "$MTBENCH_DIR/subjective/mtbench101.jsonl" ]; then
-    echo "MT-Bench-101 already exists, skipping..."
-else
-    mkdir -p "$MTBENCH_DIR"
-    echo "Cloning MT-Bench-101 repository..."
-    # Clone the repository (sparse checkout for data only).
-    git clone --depth 1 --filter=blob:none --sparse \
-        https://github.com/mtbench101/mt-bench-101.git "$MTBENCH_DIR/repo" 2>/dev/null || true
-    cd "$MTBENCH_DIR/repo"
-    git sparse-checkout set data 2>/dev/null || true
-    cd -
-    # Copy data files.
-    if [ -d "$MTBENCH_DIR/repo/data" ]; then
-        cp -r "$MTBENCH_DIR/repo/data"/* "$MTBENCH_DIR/"
-        rm -rf "$MTBENCH_DIR/repo"
-        echo "MT-Bench-101 downloaded successfully."
-    else
-        echo "Warning: Could not download MT-Bench-101. Please download manually from:"
-        echo "  https://github.com/mtbench101/mt-bench-101"
-        rm -rf "$MTBENCH_DIR/repo"
+Examples:
+  ./download_datasets.sh
+  ./download_datasets.sh qmsum
+  ./download_datasets.sh mtbench101 ./data
+EOF
+}
+
+normalize_selector() {
+    case "${1,,}" in
+        all|"")
+            echo "all"
+            ;;
+        mtbench101|mt-bench-101|mtbench|mt-bench)
+            echo "mtbench101"
+            ;;
+        qmsum)
+            echo "qmsum"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+download_mtbench101() {
+    local target_dir="$1/mt-bench-101"
+    if [ -f "$target_dir/subjective/mtbench101.jsonl" ]; then
+        echo "MT-Bench-101 already exists at $target_dir, skipping."
+        return
     fi
-fi
+
+    echo "=== Downloading MT-Bench-101 ==="
+    mkdir -p "$target_dir"
+    rm -rf "$target_dir/repo"
+
+    if git clone --depth 1 --filter=blob:none --sparse \
+        https://github.com/mtbench101/mt-bench-101.git "$target_dir/repo"; then
+        (
+            cd "$target_dir/repo"
+            git sparse-checkout set data
+        )
+        if [ -d "$target_dir/repo/data" ]; then
+            cp -R "$target_dir/repo/data/." "$target_dir/"
+            rm -rf "$target_dir/repo"
+            echo "MT-Bench-101 downloaded to $target_dir"
+            return
+        fi
+    fi
+
+    rm -rf "$target_dir/repo"
+    echo "Warning: failed to download MT-Bench-101 automatically."
+    echo "Manual source: https://github.com/mtbench101/mt-bench-101"
+}
+
+download_qmsum() {
+    local target_dir="$1/QMSum"
+    if [ -d "$target_dir/data/Committee/test" ]; then
+        echo "QMSum already exists at $target_dir, skipping."
+        return
+    fi
+
+    echo "=== Downloading QMSum ==="
+    rm -rf "$target_dir"
+    if git clone --depth 1 https://github.com/Yale-LILY/QMSum.git "$target_dir"; then
+        echo "QMSum downloaded to $target_dir"
+        return
+    fi
+
+    rm -rf "$target_dir"
+    echo "Warning: failed to download QMSum automatically."
+    echo "Manual source: https://github.com/Yale-LILY/QMSum"
+}
+
+print_dataset_info() {
+    local base_dir="$1"
+
+    if [ -f "$base_dir/mt-bench-101/subjective/mtbench101.jsonl" ]; then
+        local case_count
+        case_count="$(wc -l < "$base_dir/mt-bench-101/subjective/mtbench101.jsonl")"
+        echo
+        echo "MT-Bench-101:"
+        echo "  Location: $base_dir/mt-bench-101"
+        echo "  Cases:    $case_count"
+    fi
+
+    if [ -d "$base_dir/QMSum/data" ]; then
+        local meeting_count
+        meeting_count="$(find "$base_dir/QMSum/data" -path '*/test/*.json' | wc -l | tr -d ' ')"
+        echo
+        echo "QMSum:"
+        echo "  Location: $base_dir/QMSum"
+        echo "  Test JSON files: $meeting_count"
+    fi
+}
+
+SELECTOR="$(normalize_selector "$DATASET_SELECTOR")" || {
+    print_usage
+    exit 1
+}
+
+mkdir -p "$DATA_DIR"
+echo "Data directory: $DATA_DIR"
+
+case "$SELECTOR" in
+    all)
+        download_mtbench101 "$DATA_DIR"
+        echo
+        download_qmsum "$DATA_DIR"
+        ;;
+    mtbench101)
+        download_mtbench101 "$DATA_DIR"
+        ;;
+    qmsum)
+        download_qmsum "$DATA_DIR"
+        ;;
+esac
+
+print_dataset_info "$DATA_DIR"
+
 echo
-
-# Show dataset info.
-if [ -f "$MTBENCH_DIR/subjective/mtbench101.jsonl" ]; then
-    CASE_COUNT=$(wc -l < "$MTBENCH_DIR/subjective/mtbench101.jsonl")
-    echo "=== Dataset Info ==="
-    echo "Location: $MTBENCH_DIR"
-    echo "Test cases: $CASE_COUNT"
-    echo
-fi
-
-echo "=== Usage ==="
-echo "cd summary/trpc-agent-go-impl"
-echo "go run . -num-cases 10"
-echo "go run . -num-cases 10 -verbose"
+echo "=== Usage Examples ==="
+echo "MT-Bench-101:"
+echo "  cd summary/trpc-agent-go-impl"
+echo "  go run . -dataset ../data/mt-bench-101 -dataset-format mtbench101 -task CM -num-cases 10"
+echo
+echo "QMSum:"
+echo "  cd summary/trpc-agent-go-impl"
+echo "  go run . -dataset ../data/QMSum -dataset-format qmsum -qmsum-domain Committee -num-cases 5"

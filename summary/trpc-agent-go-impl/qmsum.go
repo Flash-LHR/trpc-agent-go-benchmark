@@ -12,7 +12,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -32,54 +31,6 @@ import (
 	sessioninmemory "trpc.group/trpc-go/trpc-agent-go/session/inmemory"
 	sessionpgvector "trpc.group/trpc-go/trpc-agent-go/session/pgvector"
 	sessionsummary "trpc.group/trpc-go/trpc-agent-go/session/summary"
-)
-
-var (
-	flagDatasetFormat = flag.String(
-		"dataset-format",
-		"",
-		"Dataset format: mtbench101 or qmsum (default: auto-detect from -dataset)",
-	)
-	flagQMSumSplit = flag.String(
-		"qmsum-split",
-		"test",
-		"QMSum split: train, val, or test",
-	)
-	flagQMSumDomain = flag.String(
-		"qmsum-domain",
-		"ALL",
-		"QMSum domain: ALL, Academic, Committee, or Product",
-	)
-	flagQMSumQueryType = flag.String(
-		"qmsum-query-type",
-		"specific",
-		"QMSum query type: specific, general, or all",
-	)
-	flagPGVectorDSN = flag.String(
-		"pgvector-dsn",
-		"",
-		"PostgreSQL DSN for QMSum summary/on-demand modes (env PGVECTOR_DSN)",
-	)
-	flagEmbedModel = flag.String(
-		"embed-model",
-		"",
-		"Embedding model for QMSum session pgvector indexing (env EMBED_MODEL_NAME or text-embedding-3-small)",
-	)
-	flagQMSumMaxTokens = flag.Int(
-		"qmsum-max-tokens",
-		384,
-		"Maximum answer tokens for one QMSum query",
-	)
-	flagQMSumMaxToolIterations = flag.Int(
-		"qmsum-max-tool-iterations",
-		6,
-		"Maximum tool iterations for summary_ondemand mode",
-	)
-	flagQMSumSummaryWait = flag.Duration(
-		"qmsum-summary-wait",
-		45*time.Second,
-		"Maximum time to wait for session summary generation before querying",
-	)
 )
 
 const (
@@ -178,46 +129,41 @@ type QMSumResults struct {
 	OnDemandROUGELGainAvg float64 `json:"ondemand_rouge_l_gain_avg,omitempty"`
 }
 
-func detectDatasetFormat(datasetPath string) string {
-	switch strings.ToLower(strings.TrimSpace(*flagDatasetFormat)) {
-	case "mtbench101":
-		return "mtbench101"
-	case "qmsum":
-		return "qmsum"
-	}
-	if strings.Contains(strings.ToLower(datasetPath), "qmsum") {
-		return "qmsum"
-	}
-	return "mtbench101"
+type QMSumBenchmark struct {
+	cfg *appConfig
 }
 
-func runQMSumBenchmark(modelName, outputDir string) error {
-	log.Printf("=== Summary Evaluation (QMSum) ===")
-	log.Printf("Model: %s", modelName)
-	log.Printf("Dataset: %s", *flagDataset)
-	log.Printf("Split: %s | Domain: %s | QueryType: %s",
-		*flagQMSumSplit, *flagQMSumDomain, *flagQMSumQueryType)
-	log.Printf("Output: %s", outputDir)
-	log.Printf("Event Threshold: %d", *flagEvents)
-	log.Printf("LLM Evaluation: %v", *flagUseLLMEval)
+func newQMSumBenchmark(cfg *appConfig) *QMSumBenchmark {
+	return &QMSumBenchmark{cfg: cfg}
+}
 
-	loader := dataset.NewDatasetLoader(*flagDataset)
+func (b *QMSumBenchmark) Run(ctx context.Context) error {
+	log.Printf("=== Summary Evaluation (QMSum) ===")
+	log.Printf("Model: %s", b.cfg.ModelName)
+	log.Printf("Dataset: %s", b.cfg.DatasetPath)
+	log.Printf("Split: %s | Domain: %s | QueryType: %s",
+		b.cfg.QMSum.Split, b.cfg.QMSum.Domain, b.cfg.QMSum.QueryType)
+	log.Printf("Output: %s", b.cfg.OutputDir)
+	log.Printf("Event Threshold: %d", b.cfg.Events)
+	log.Printf("LLM Evaluation: %v", b.cfg.UseLLMEval)
+
+	loader := dataset.NewDatasetLoader(b.cfg.DatasetPath)
 	cases, err := loader.LoadQMSum(
-		*flagQMSumSplit,
-		*flagQMSumDomain,
-		*flagQMSumQueryType,
+		b.cfg.QMSum.Split,
+		b.cfg.QMSum.Domain,
+		b.cfg.QMSum.QueryType,
 	)
 	if err != nil {
 		return fmt.Errorf("load QMSum: %w", err)
 	}
-	if *flagNumCases > 0 && *flagNumCases < len(cases) {
-		cases = cases[:*flagNumCases]
+	if b.cfg.NumCases > 0 && b.cfg.NumCases < len(cases) {
+		cases = cases[:b.cfg.NumCases]
 	}
 	log.Printf("Loaded %d QMSum cases", len(cases))
 
-	llm := openai.New(modelName)
+	llm := openai.New(b.cfg.ModelName)
 	var judge *qmsumLLMJudge
-	if *flagUseLLMEval {
+	if b.cfg.UseLLMEval {
 		judge = newQMSumLLMJudge(llm)
 	}
 
@@ -228,7 +174,7 @@ func runQMSumBenchmark(modelName, outputDir string) error {
 		}
 	}()
 
-	summarySvc, err := createQMSumSummaryService(llm)
+	summarySvc, err := b.createQMSumSummaryService(llm)
 	if err != nil {
 		return err
 	}
@@ -240,21 +186,21 @@ func runQMSumBenchmark(modelName, outputDir string) error {
 
 	results := &QMSumResults{
 		Timestamp:      time.Now().Format(time.RFC3339),
-		Model:          modelName,
+		Model:          b.cfg.ModelName,
 		DatasetFormat:  "qmsum",
-		Dataset:        *flagDataset,
-		Split:          *flagQMSumSplit,
-		Domain:         *flagQMSumDomain,
-		QueryType:      *flagQMSumQueryType,
+		Dataset:        b.cfg.DatasetPath,
+		Split:          b.cfg.QMSum.Split,
+		Domain:         b.cfg.QMSum.Domain,
+		QueryType:      b.cfg.QMSum.QueryType,
 		NumCases:       len(cases),
-		EventThreshold: *flagEvents,
+		EventThreshold: b.cfg.Events,
 		Cases:          make([]*QMSumCaseResult, 0, len(cases)),
 	}
 
 	start := time.Now()
 	completed := make(map[string]bool)
-	if *flagResume {
-		if checkpoint := loadQMSumCheckpoint(outputDir); checkpoint != nil {
+	if b.cfg.Resume {
+		if checkpoint := loadQMSumCheckpoint(b.cfg.OutputDir); checkpoint != nil {
 			results = checkpoint
 			completed = make(map[string]bool, len(results.Cases))
 			for _, cr := range results.Cases {
@@ -274,8 +220,8 @@ func runQMSumBenchmark(modelName, outputDir string) error {
 		log.Printf("[%d/%d] Case %s (%s/%s)", i+1, len(cases),
 			qcase.CaseID, qcase.Domain, qcase.QueryType)
 
-		caseResult, err := evaluateQMSumCase(
-			context.Background(),
+		caseResult, err := b.evaluateQMSumCase(
+			ctx,
 			llm,
 			judge,
 			longSvc,
@@ -288,8 +234,8 @@ func runQMSumBenchmark(modelName, outputDir string) error {
 		}
 
 		results.Cases = append(results.Cases, caseResult)
-		saveQMSumCheckpoint(outputDir, results)
-		saveQMSumCaseLog(outputDir, caseResult)
+		saveQMSumCheckpoint(b.cfg.OutputDir, results)
+		saveQMSumCaseLog(b.cfg.OutputDir, caseResult)
 		logQMSumCaseResult(caseResult)
 
 		elapsed := time.Since(start)
@@ -301,26 +247,26 @@ func runQMSumBenchmark(modelName, outputDir string) error {
 
 	aggregateQMSumResults(results)
 	printQMSumResults(results)
-	saveQMSumResults(outputDir, results)
+	saveQMSumResults(b.cfg.OutputDir, results)
 	return nil
 }
 
-func createQMSumSummaryService(
+func (b *QMSumBenchmark) createQMSumSummaryService(
 	llm model.Model,
 ) (session.Service, error) {
-	dsn := getQMSumPGVectorDSN()
+	dsn := b.cfg.QMSum.PGVectorDSN
 	if dsn == "" {
 		return nil, fmt.Errorf(
 			"pgvector-dsn or PGVECTOR_DSN is required for QMSum summary benchmark",
 		)
 	}
 
-	embedModelName := getQMSumEmbedModelName()
+	embedModelName := b.cfg.QMSum.EmbedModel
 	emb := newQMSumEmbeddingEmbedder(embedModelName)
 	sum := sessionsummary.NewSummarizer(
 		llm,
 		sessionsummary.WithChecksAny(
-			sessionsummary.CheckEventThreshold(*flagEvents),
+			sessionsummary.CheckEventThreshold(b.cfg.Events),
 		),
 	)
 
@@ -340,11 +286,11 @@ func createQMSumSummaryService(
 		sessionpgvector.WithSummarizer(sum),
 		sessionpgvector.WithAsyncSummaryNum(1),
 		sessionpgvector.WithSummaryQueueSize(16),
-		sessionpgvector.WithSummaryJobTimeout(*flagQMSumSummaryWait),
+		sessionpgvector.WithSummaryJobTimeout(b.cfg.QMSum.SummaryWait),
 	)
 }
 
-func evaluateQMSumCase(
+func (b *QMSumBenchmark) evaluateQMSumCase(
 	ctx context.Context,
 	llm model.Model,
 	judge *qmsumLLMJudge,
@@ -356,21 +302,21 @@ func evaluateQMSumCase(
 		return nil, fmt.Errorf("QMSum case is nil")
 	}
 
-	longResult, err := runQMSumMode(
+	longResult, err := b.runQMSumMode(
 		ctx, llm, judge, longSvc, qcase, qmsumModeLongContext,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("long_context: %w", err)
 	}
 
-	summaryResult, err := runQMSumMode(
+	summaryResult, err := b.runQMSumMode(
 		ctx, llm, judge, summarySvc, qcase, qmsumModeSummary,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("summary: %w", err)
 	}
 
-	onDemandResult, err := runQMSumMode(
+	onDemandResult, err := b.runQMSumMode(
 		ctx, llm, judge, summarySvc, qcase, qmsumModeOnDemand,
 	)
 	if err != nil {
@@ -412,7 +358,7 @@ func evaluateQMSumCase(
 	return result, nil
 }
 
-func runQMSumMode(
+func (b *QMSumBenchmark) runQMSumMode(
 	ctx context.Context,
 	llm model.Model,
 	judge *qmsumLLMJudge,
@@ -444,7 +390,7 @@ func runQMSumMode(
 		summaryAvailable bool
 	)
 	if mode == qmsumModeSummary || mode == qmsumModeOnDemand {
-		summaryText, summaryAvailable, err = waitForQMSumSummary(
+		summaryText, summaryAvailable, err = b.waitForQMSumSummary(
 			ctx, svc, key,
 		)
 		if err != nil {
@@ -458,7 +404,7 @@ func runQMSumMode(
 	}
 	_ = sess
 
-	ag := newQMSumAgent(llm, mode)
+	ag := b.newQMSumAgent(llm, mode)
 	r := runner.NewRunner(appName, ag, runner.WithSessionService(svc))
 	defer r.Close()
 
@@ -485,7 +431,7 @@ func runQMSumMode(
 	}, nil
 }
 
-func newQMSumAgent(
+func (b *QMSumBenchmark) newQMSumAgent(
 	llm model.Model,
 	mode qmsumRunMode,
 ) agent.Agent {
@@ -494,7 +440,7 @@ func newQMSumAgent(
 		llmagent.WithInstruction(qmsumInstruction),
 		llmagent.WithGenerationConfig(model.GenerationConfig{
 			Stream:      false,
-			MaxTokens:   intPtr(*flagQMSumMaxTokens),
+			MaxTokens:   intPtr(b.cfg.QMSum.MaxTokens),
 			Temperature: float64Ptr(0),
 		}),
 	}
@@ -505,7 +451,7 @@ func newQMSumAgent(
 	if mode == qmsumModeOnDemand {
 		opts = append(opts,
 			llmagent.WithEnableOnDemandSession(true),
-			llmagent.WithMaxToolIterations(*flagQMSumMaxToolIterations),
+			llmagent.WithMaxToolIterations(b.cfg.QMSum.MaxToolIterations),
 		)
 	}
 
@@ -570,12 +516,12 @@ func seedQMSumTranscript(
 	return sess, nil
 }
 
-func waitForQMSumSummary(
+func (b *QMSumBenchmark) waitForQMSumSummary(
 	ctx context.Context,
 	svc session.Service,
 	key session.Key,
 ) (string, bool, error) {
-	deadline := time.Now().Add(*flagQMSumSummaryWait)
+	deadline := time.Now().Add(b.cfg.QMSum.SummaryWait)
 	for {
 		sess, err := svc.GetSession(ctx, key)
 		if err == nil && sess != nil {
@@ -855,16 +801,6 @@ func loadQMSumCheckpoint(outputDir string) *QMSumResults {
 	return &results
 }
 
-func getQMSumEmbedModelName() string {
-	if *flagEmbedModel != "" {
-		return *flagEmbedModel
-	}
-	if env := os.Getenv("EMBED_MODEL_NAME"); env != "" {
-		return env
-	}
-	return "text-embedding-3-small"
-}
-
 func newQMSumEmbeddingEmbedder(modelName string) *embedopenai.Embedder {
 	opts := []embedopenai.Option{
 		embedopenai.WithModel(modelName),
@@ -880,11 +816,4 @@ func newQMSumEmbeddingEmbedder(modelName string) *embedopenai.Embedder {
 		opts = append(opts, embedopenai.WithBaseURL(baseURL))
 	}
 	return embedopenai.New(opts...)
-}
-
-func getQMSumPGVectorDSN() string {
-	if *flagPGVectorDSN != "" {
-		return *flagPGVectorDSN
-	}
-	return os.Getenv("PGVECTOR_DSN")
 }
