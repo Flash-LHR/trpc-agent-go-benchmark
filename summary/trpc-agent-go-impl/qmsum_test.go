@@ -10,11 +10,14 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"trpc.group/trpc-go/trpc-agent-go-benchmark/summary/trpc-agent-go-impl/evaluation/dataset"
 	"trpc.group/trpc-go/trpc-agent-go/event"
 	"trpc.group/trpc-go/trpc-agent-go/model"
+	"trpc.group/trpc-go/trpc-agent-go/session"
+	sessioninmemory "trpc.group/trpc-go/trpc-agent-go/session/inmemory"
 )
 
 func TestRoundRobinQMSumCasesByMeeting(t *testing.T) {
@@ -119,5 +122,160 @@ func TestConsumeEventsWithToolStats(t *testing.T) {
 	}
 	if toolStats.Count("session_load") != 1 {
 		t.Fatalf("session_load count = %d, want 1", toolStats.Count("session_load"))
+	}
+}
+
+func TestConsumeFinalAssistantAnswerWithToolStatsSkipsToolPayload(t *testing.T) {
+	t.Parallel()
+
+	evtCh := make(chan *event.Event, 3)
+	evtCh <- event.New("1", "test", event.WithResponse(&model.Response{
+		Done: true,
+		Choices: []model.Choice{{
+			Message: model.Message{
+				Role: model.RoleAssistant,
+				ToolCalls: []model.ToolCall{{
+					ID:   "call-search",
+					Type: "function",
+					Function: model.FunctionDefinitionParam{
+						Name: "session_search",
+					},
+				}},
+			},
+		}},
+	}))
+	evtCh <- event.New("2", "test", event.WithResponse(&model.Response{
+		Done: true,
+		Choices: []model.Choice{{
+			Message: model.Message{
+				Role:     model.RoleTool,
+				ToolID:   "call-search",
+				ToolName: "session_search",
+				Content:  `{"results":[],"count":0}`,
+			},
+		}},
+	}))
+	evtCh <- event.New("3", "test", event.WithResponse(&model.Response{
+		Done: true,
+		Choices: []model.Choice{{
+			Message: model.Message{
+				Role:    model.RoleAssistant,
+				Content: "Natural language final answer.",
+			},
+		}},
+		Usage: &model.Usage{
+			PromptTokens:     21,
+			CompletionTokens: 9,
+			TotalTokens:      30,
+		},
+	}))
+	close(evtCh)
+
+	answer, usage, toolStats := consumeFinalAssistantAnswerWithToolStats(evtCh)
+	if answer != "Natural language final answer." {
+		t.Fatalf("answer = %q, want only final assistant answer", answer)
+	}
+	if usage.TotalTokens != 30 {
+		t.Fatalf("usage.TotalTokens = %d, want 30", usage.TotalTokens)
+	}
+	if toolStats.Count("session_search") != 1 {
+		t.Fatalf("session_search count = %d, want 1", toolStats.Count("session_search"))
+	}
+}
+
+func TestConsumeFinalAssistantAnswerWithDetailsCapturesToolTrace(t *testing.T) {
+	t.Parallel()
+
+	evtCh := make(chan *event.Event, 3)
+	evtCh <- event.New("1", "test", event.WithResponse(&model.Response{
+		Done: true,
+		Choices: []model.Choice{{
+			Message: model.Message{
+				Role: model.RoleAssistant,
+				ToolCalls: []model.ToolCall{{
+					ID:   "call-search",
+					Type: "function",
+					Function: model.FunctionDefinitionParam{
+						Name:      "session_search",
+						Arguments: []byte(`{"query":"david hopkins new act"}`),
+					},
+				}},
+			},
+		}},
+	}))
+	evtCh <- event.New("2", "test", event.WithResponse(&model.Response{
+		Done: true,
+		Choices: []model.Choice{{
+			Message: model.Message{
+				Role:     model.RoleTool,
+				ToolID:   "call-search",
+				ToolName: "session_search",
+				Content:  `{"results":[{"event_id":"evt-1"}],"count":1}`,
+			},
+		}},
+	}))
+	evtCh <- event.New("3", "test", event.WithResponse(&model.Response{
+		Done: true,
+		Choices: []model.Choice{{
+			Message: model.Message{
+				Role:    model.RoleAssistant,
+				Content: "Final answer.",
+			},
+		}},
+	}))
+	close(evtCh)
+
+	answer, _, toolStats, traces := consumeFinalAssistantAnswerWithDetails(evtCh)
+	if answer != "Final answer." {
+		t.Fatalf("answer = %q, want Final answer.", answer)
+	}
+	if toolStats.Count("session_search") != 1 {
+		t.Fatalf("session_search count = %d, want 1", toolStats.Count("session_search"))
+	}
+	if len(traces) != 1 {
+		t.Fatalf("trace count = %d, want 1", len(traces))
+	}
+	if traces[0].Arguments != `{"query":"david hopkins new act"}` {
+		t.Fatalf("trace arguments = %q", traces[0].Arguments)
+	}
+	if traces[0].Response != `{"results":[{"event_id":"evt-1"}],"count":1}` {
+		t.Fatalf("trace response = %q", traces[0].Response)
+	}
+}
+
+func TestSeedQMSumTranscriptTimestampsAfterSessionCreatedAt(t *testing.T) {
+	t.Parallel()
+
+	svc := sessioninmemory.NewSessionService()
+	defer func() {
+		_ = svc.Close()
+	}()
+
+	qcase := &dataset.QMSumCase{
+		CaseID: "case-1",
+		Transcript: []dataset.QMSumTranscriptTurn{
+			{Speaker: "Alice", Content: "First"},
+			{Speaker: "Bob", Content: "Second"},
+		},
+	}
+	key := session.Key{
+		AppName:   "app",
+		UserID:    "user",
+		SessionID: "sess",
+	}
+
+	sess, err := seedQMSumTranscript(context.Background(), svc, key, qcase)
+	if err != nil {
+		t.Fatalf("seedQMSumTranscript returned error: %v", err)
+	}
+
+	if len(sess.Events) != 2 {
+		t.Fatalf("seedQMSumTranscript created %d events, want 2", len(sess.Events))
+	}
+	if !sess.Events[0].Timestamp.After(sess.CreatedAt) {
+		t.Fatalf("first event timestamp %v should be after session.CreatedAt %v", sess.Events[0].Timestamp, sess.CreatedAt)
+	}
+	if !sess.Events[1].Timestamp.After(sess.Events[0].Timestamp) {
+		t.Fatalf("second event timestamp %v should be after first %v", sess.Events[1].Timestamp, sess.Events[0].Timestamp)
 	}
 }

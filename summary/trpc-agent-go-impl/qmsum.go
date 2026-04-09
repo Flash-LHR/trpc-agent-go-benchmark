@@ -60,12 +60,23 @@ Rules:
 - Prefer one concise paragraph. Do not add bullet points or meta commentary.
 - If tools are available and important details may be hidden by session summary, inspect historical events before answering.`
 
+const qmsumOnDemandInstruction = `When session tools are available, treat this as a hidden-context recovery task.
+
+Required behavior for detail questions:
+- For specific/detail questions, call session_search with scope=current_hidden before answering unless the visible summary already states the exact requested fact.
+- Use the user's real entities, names, and topics in the search query. If the first search is empty, rewrite the query once and search again.
+- session_search results may already contain a context field with raw nearby turns. Read that context first and answer from it directly when it already contains the needed evidence.
+- If session_search returns hits but the provided context is still insufficient, call session_load on the best hit before answering.
+- Do not claim the topic was not discussed, that a person did not participate, or that the answer is unavailable if session_search returned relevant hits mentioning the requested entities or topic.
+- Never copy raw tool JSON, snippets, or schema-shaped output into the final answer. Use tool results only as evidence for a natural-language answer.`
+
 // QMSumModeResult stores one mode's answer, metrics, and token usage.
 type QMSumModeResult struct {
 	Mode                   string        `json:"mode"`
 	Answer                 string        `json:"answer"`
 	Metrics                *QMSumMetrics `json:"metrics,omitempty"`
 	TokenUsage             *TokenUsage   `json:"token_usage,omitempty"`
+	ToolTraces             []ToolTrace   `json:"tool_traces,omitempty"`
 	DurationMs             int64         `json:"duration_ms"`
 	SeedDurationMs         int64         `json:"seed_duration_ms,omitempty"`
 	SummaryBuildDurationMs int64         `json:"summary_build_duration_ms,omitempty"`
@@ -541,13 +552,14 @@ func (b *QMSumBenchmark) runQMSumMode(
 		}, err
 	}
 
-	answer, usage, toolStats := consumeEventsWithToolStats(evtCh)
+	answer, usage, toolStats, toolTraces := consumeFinalAssistantAnswerWithDetails(evtCh)
 	queryDurationMs := time.Since(queryStart).Milliseconds()
 	return &QMSumModeResult{
 		Mode:                   string(mode),
 		Answer:                 strings.TrimSpace(answer),
-		Metrics:                evaluateQMSumMetrics(ctx, judge, qcase.Query, qcase.Answer, answer),
+		Metrics:                evaluateQMSumMetrics(ctx, judge, qcase.Query, qcase.Answer, strings.TrimSpace(answer)),
 		TokenUsage:             usage,
+		ToolTraces:             toolTraces,
 		DurationMs:             time.Since(totalStart).Milliseconds(),
 		SeedDurationMs:         seedDurationMs,
 		SummaryBuildDurationMs: summaryBuildDurationMs,
@@ -563,9 +575,14 @@ func (b *QMSumBenchmark) newQMSumAgent(
 	llm model.Model,
 	mode qmsumRunMode,
 ) agent.Agent {
+	instruction := qmsumInstruction
+	if mode == qmsumModeOnDemand {
+		instruction += "\n\n" + qmsumOnDemandInstruction
+	}
+
 	opts := []llmagent.Option{
 		llmagent.WithModel(llm),
-		llmagent.WithInstruction(qmsumInstruction),
+		llmagent.WithInstruction(instruction),
 		llmagent.WithGenerationConfig(model.GenerationConfig{
 			Stream:      false,
 			MaxTokens:   intPtr(b.cfg.QMSum.MaxTokens),
@@ -611,7 +628,7 @@ func seedQMSumTranscript(
 		return nil, fmt.Errorf("create session: %w", err)
 	}
 
-	baseTime := time.Now().UTC().Add(-time.Duration(len(qcase.Transcript)) * time.Second)
+	baseTime := sess.CreatedAt.UTC().Add(time.Millisecond)
 	for i, turn := range qcase.Transcript {
 		content := fmt.Sprintf(
 			"[Turn %03d] %s: %s",
@@ -634,7 +651,10 @@ func seedQMSumTranscript(
 				},
 			}),
 		)
-		evt.Timestamp = baseTime.Add(time.Duration(i) * time.Second)
+		// Keep transcript order stable while ensuring seeded event timestamps are
+		// newer than session.CreatedAt, otherwise summary retrieval treats the
+		// generated summary as stale and filters it out.
+		evt.Timestamp = baseTime.Add(time.Duration(i) * time.Millisecond)
 		if err := svc.AppendEvent(ctx, sess, evt); err != nil {
 			return nil, fmt.Errorf("append seed event %d: %w", i, err)
 		}
@@ -944,6 +964,18 @@ func saveQMSumCaseLog(outputDir string, cr *QMSumCaseResult) {
 		fmt.Fprintf(f, "SummaryChars: %d\n", mr.SummaryChars)
 		fmt.Fprintf(f, "ToolCalls: session_search=%d session_load=%d\n",
 			mr.SessionSearchCalls, mr.SessionLoadCalls)
+		if len(mr.ToolTraces) > 0 {
+			fmt.Fprintf(f, "ToolTrace:\n")
+			for _, trace := range mr.ToolTraces {
+				fmt.Fprintf(
+					f,
+					"- %s args=%s\n  response=%s\n",
+					compactToolTraceText(trace.Name, 48),
+					compactToolTraceText(trace.Arguments, 320),
+					compactToolTraceText(trace.Response, 600),
+				)
+			}
+		}
 		if mr.TokenUsage != nil {
 			fmt.Fprintf(f, "Tokens: prompt=%d completion=%d total=%d\n",
 				mr.TokenUsage.PromptTokens,
@@ -974,6 +1006,21 @@ func saveQMSumCaseLog(outputDir string, cr *QMSumCaseResult) {
 	writeMode("LONG CONTEXT", cr.LongContext)
 	writeMode("SUMMARY", cr.Summary)
 	writeMode("SUMMARY ON-DEMAND", cr.OnDemand)
+}
+
+func compactToolTraceText(text string, limit int) string {
+	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if text == "" || limit <= 0 {
+		return "-"
+	}
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	if limit <= 3 {
+		return string(runes[:limit])
+	}
+	return string(runes[:limit-3]) + "..."
 }
 
 func saveQMSumResults(outputDir string, results *QMSumResults) {

@@ -30,6 +30,13 @@ type ToolCallStats struct {
 	Counts map[string]int `json:"counts,omitempty"`
 }
 
+type ToolTrace struct {
+	ID        string `json:"id,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
+	Response  string `json:"response,omitempty"`
+}
+
 func (s *ToolCallStats) increment(toolName string) {
 	if s == nil {
 		return
@@ -89,6 +96,72 @@ func consumeEventsWithToolStats(evtCh <-chan *event.Event) (string, *TokenUsage,
 	return response.String(), usage, toolStats
 }
 
+func consumeFinalAssistantAnswerWithToolStats(
+	evtCh <-chan *event.Event,
+) (string, *TokenUsage, *ToolCallStats) {
+	answer, usage, toolStats, _ := consumeFinalAssistantAnswerWithDetails(evtCh)
+	return answer, usage, toolStats
+}
+
+func consumeFinalAssistantAnswerWithDetails(
+	evtCh <-chan *event.Event,
+) (string, *TokenUsage, *ToolCallStats, []ToolTrace) {
+	usage := &TokenUsage{}
+	toolStats := &ToolCallStats{}
+	seenToolCalls := make(map[string]struct{})
+	traceRecorder := newToolTraceRecorder()
+
+	var finalAnswer string
+	for evt := range evtCh {
+		if evt.Error != nil || evt.Response == nil {
+			continue
+		}
+		if evt.Response.Usage != nil {
+			usage.PromptTokens = evt.Response.Usage.PromptTokens
+			usage.CompletionTokens = evt.Response.Usage.CompletionTokens
+			usage.TotalTokens = evt.Response.Usage.TotalTokens
+		}
+		recordToolCalls(evt.Response, toolStats, seenToolCalls)
+		traceRecorder.RecordResponse(evt.Response)
+		finalAnswer = pickLatestFinalAssistantContent(finalAnswer, evt.Response)
+	}
+	return finalAnswer, usage, toolStats, traceRecorder.Traces()
+}
+
+func pickLatestFinalAssistantContent(current string, resp *model.Response) string {
+	if resp == nil {
+		return current
+	}
+
+	for _, choice := range resp.Choices {
+		if content, ok := finalAssistantContentFromMessage(choice.Message); ok {
+			current = content
+		}
+		if content, ok := finalAssistantContentFromMessage(choice.Delta); ok {
+			if current == "" {
+				current = content
+			} else {
+				current += content
+			}
+		}
+	}
+	return current
+}
+
+func finalAssistantContentFromMessage(msg model.Message) (string, bool) {
+	if len(msg.ToolCalls) > 0 || msg.ToolID != "" {
+		return "", false
+	}
+	content := strings.TrimSpace(msg.Content)
+	if content == "" {
+		return "", false
+	}
+	if msg.Role != "" && msg.Role != model.RoleAssistant {
+		return "", false
+	}
+	return content, true
+}
+
 func recordToolCalls(
 	resp *model.Response,
 	toolStats *ToolCallStats,
@@ -105,6 +178,105 @@ func recordToolCalls(
 			recordToolCall(tc, toolStats, seenToolCalls)
 		}
 	}
+}
+
+type toolTraceRecorder struct {
+	traces    []*ToolTrace
+	indexByID map[string]int
+}
+
+func newToolTraceRecorder() *toolTraceRecorder {
+	return &toolTraceRecorder{
+		indexByID: make(map[string]int),
+	}
+}
+
+func (r *toolTraceRecorder) Traces() []ToolTrace {
+	if r == nil || len(r.traces) == 0 {
+		return nil
+	}
+	out := make([]ToolTrace, 0, len(r.traces))
+	for _, trace := range r.traces {
+		if trace == nil {
+			continue
+		}
+		out = append(out, *trace)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (r *toolTraceRecorder) RecordResponse(resp *model.Response) {
+	if r == nil || resp == nil {
+		return
+	}
+	for _, choice := range resp.Choices {
+		for _, tc := range choice.Message.ToolCalls {
+			r.recordToolCall(tc)
+		}
+		for _, tc := range choice.Delta.ToolCalls {
+			r.recordToolCall(tc)
+		}
+		r.recordToolMessage(choice.Message)
+		r.recordToolMessage(choice.Delta)
+	}
+}
+
+func (r *toolTraceRecorder) recordToolCall(tc model.ToolCall) {
+	name := strings.TrimSpace(tc.Function.Name)
+	args := strings.TrimSpace(string(tc.Function.Arguments))
+	if name == "" && strings.TrimSpace(tc.ID) == "" && args == "" {
+		return
+	}
+	trace := r.ensureTrace(tc.ID, name)
+	if trace.Name == "" {
+		trace.Name = name
+	}
+	if trace.Arguments == "" {
+		trace.Arguments = args
+	}
+}
+
+func (r *toolTraceRecorder) recordToolMessage(msg model.Message) {
+	toolID := strings.TrimSpace(msg.ToolID)
+	toolName := strings.TrimSpace(msg.ToolName)
+	content := strings.TrimSpace(msg.Content)
+	if toolID == "" && toolName == "" {
+		return
+	}
+	trace := r.ensureTrace(toolID, toolName)
+	if trace.Name == "" {
+		trace.Name = toolName
+	}
+	if content == "" {
+		return
+	}
+	if trace.Response == "" {
+		trace.Response = content
+		return
+	}
+	trace.Response += content
+}
+
+func (r *toolTraceRecorder) ensureTrace(id, name string) *ToolTrace {
+	id = strings.TrimSpace(id)
+	if id != "" {
+		if idx, ok := r.indexByID[id]; ok {
+			return r.traces[idx]
+		}
+	}
+
+	trace := &ToolTrace{
+		ID:   id,
+		Name: strings.TrimSpace(name),
+	}
+	if id != "" {
+		r.indexByID[id] = len(r.traces)
+	}
+	r.traces = append(r.traces, trace)
+	return trace
 }
 
 func recordToolCall(
