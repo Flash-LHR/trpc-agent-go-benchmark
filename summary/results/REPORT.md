@@ -1,8 +1,8 @@
-# Evaluating Session Summarization Effectiveness: An Empirical Study on MT-Bench-101
+# Session Summarization and On-Demand Retrieval: Benchmark Results on MT-Bench-101 and QMSum
 
 ## 1. Introduction
 
-Large Language Models (LLMs) face context window limitations and token cost issues in multi-turn conversation scenarios. Session summarization is a common solution: compressing conversation history into summaries to reduce input token count. However, summarization may lead to loss of critical information, affecting subsequent response quality. This paper aims to answer the following questions: (1) In which scenarios can session summarization effectively save tokens? (2) How much does summarization impact response quality? (3) What is the optimal summarization triggering strategy?
+Large Language Models (LLMs) face context window limitations and token cost issues in multi-turn conversation scenarios. Session summarization is a common solution: compressing conversation history into summaries to reduce input token count. However, summarization may also hide critical information and degrade later answers. This report looks at both sides of that tradeoff. On MT-Bench-101, we evaluate when summarization is broadly beneficial or harmful. On QMSum, we evaluate whether an on-demand retrieval path can bring back early details after summary compression has hidden them. The goal here is to answer the following questions: (1) In which scenarios can session summarization effectively save tokens? (2) How much does summarization impact response quality? (3) Can on-demand retrieval recover quality loss when summary hides early evidence? (4) What is the practical tradeoff between quality recovery and token cost?
 
 Through comparative experiments on 9 tasks (917 cases) from the MT-Bench-101 dataset, we find that:
 
@@ -10,7 +10,13 @@ Through comparative experiments on 9 tasks (917 cases) from the MT-Bench-101 dat
 - **Harmful for Short Dialogues**: ≤2 turn dialogues not only fail to benefit but actually increase token consumption due to summarization overhead
 - **Triggering Strategy Too Aggressive**: Current setting (triggering summary every 2 turns) is unsuitable for short dialogues
 
-Main contributions include: systematic evaluation of session summarization on MT-Bench-101, identification of key factors affecting effectiveness (conversation turns, baseline prompt length), and discovery of negative effects in short dialogue scenarios with improvement recommendations.
+On a broader QMSum hidden-detail workload (`test / ALL / specific / support_distance_from_end >= 80`), we further find that:
+
+- **Summary Alone Loses Important Early Details**: plain summary reduces prompt tokens by 94.78% versus long context, but ROUGE-L drops from 0.1930 to 0.1516
+- **On-Demand Retrieval Recovers a Meaningful Portion of the Loss**: `summary_ondemand` improves ROUGE-L to 0.1770, recovering 61.5% of the ROUGE-L loss and 59.9% of the F1 loss caused by summary compression
+- **Recovery Still Preserves Large Savings**: `summary_ondemand` keeps a 76.69% prompt-token reduction versus long context
+
+Overall, the MT-Bench-101 results tell us when summary is broadly worth enabling, while the QMSum results tell us what happens after summary hides details and whether an on-demand retrieval path can recover them on a broader hidden-detail workload.
 
 ---
 
@@ -18,16 +24,24 @@ Main contributions include: systematic evaluation of session summarization on MT
 
 ### 2.1 Experimental Design
 
-We employ an **A/B comparative experiment** design:
+We use two complementary evaluation settings.
+
+For the MT-Bench-101 study, we employ an **A/B comparative experiment** design:
 
 - **Baseline Group**: Retains complete conversation history as context
 - **Experimental Group (Summary)**: Generates summary after every N turns, replacing original history with summary
 
-For the same input, both groups use the same LLM to generate responses, comparing token consumption and response quality.
+For the QMSum study, we evaluate a **three-mode setup**:
+
+- **Long Context**: Keeps the full transcript in prompt
+- **Summary**: Replaces older history with a summary
+- **Summary + On-Demand Retrieval**: Uses summary by default and allows the agent to call `session_search` and `session_load` against hidden history when hidden details need to be surfaced
+
+Together, the two settings answer different but connected questions: when summary is useful in general, and whether hidden detail can be recovered once summary is enabled.
 
 ### 2.2 Evaluation Metrics
 
-Following τ-bench and τ²-bench methodologies, we define three evaluation dimensions:
+Following τ-bench and τ²-bench methodologies, the MT-Bench-101 portion defines three evaluation dimensions:
 
 | Metric                    | Weight | Definition                                                                                              |
 | ------------------------- | -----: | ------------------------------------------------------------------------------------------------------- |
@@ -37,9 +51,23 @@ Following τ-bench and τ²-bench methodologies, we define three evaluation dime
 
 **Pass^1 Metric**: If consistency score ≥ 0.7, the case passes. Pass^1 = passed cases / total cases.
 
+For the QMSum portion, we report answer-overlap metrics and cost metrics directly:
+
+| Metric                                 | What it means in this report                                                                                                                                    |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ROUGE-1/2/L**                        | Lexical overlap between model answer and reference answer; ROUGE-L is the main headline metric because it better reflects answer-level overlap under paraphrase |
+| **F1**                                 | Token-level precision/recall balance between model answer and reference answer                                                                                  |
+| **BLEU**                               | N-gram precision signal; useful as a secondary view of answer wording fidelity                                                                                  |
+| **Prompt / completion / total tokens** | Direct token-cost view for each mode                                                                                                                            |
+| **Query latency**                      | End-to-end answer-time cost for the query stage in each mode                                                                                                    |
+
+This combination lets us evaluate both semantic compression tradeoffs and targeted detail-recovery performance.
+
 ### 2.3 Dataset
 
-We use the **MT-Bench-101** dataset, which contains 13 types of multi-turn dialogue tasks. This evaluation covers 9 tasks:
+We use two datasets for two related purposes.
+
+The first is **MT-Bench-101**, which contains 13 types of multi-turn dialogue tasks. This evaluation covers 9 tasks:
 
 | Code | Task Name                 | Cases | Description                                                            |
 | ---- | ------------------------- | ----: | ---------------------------------------------------------------------- |
@@ -55,7 +83,22 @@ We use the **MT-Bench-101** dataset, which contains 13 types of multi-turn dialo
 
 **Uncovered Tasks**: AR (Anaphora Resolution), CR (Content Rephrasing), FR (Format Rephrasing), MR (Mathematical Reasoning).
 
+The second is **QMSum**, used here as a targeted hidden-detail recovery benchmark. We evaluate the following slice:
+
+| Field           | Value                             |
+| --------------- | --------------------------------- |
+| Split           | `test`                            |
+| Domain          | `ALL`                             |
+| Query Type      | `specific`                        |
+| Loaded Cases    | `244`                             |
+| Evaluated Cases | `189`                             |
+| Case Filter     | `support_distance_from_end >= 80` |
+
+This QMSum slice is designed so that supporting evidence lies sufficiently far from the end of the transcript, making it likely to be hidden once summary compression takes effect.
+
 ### 2.4 Experimental Configuration
+
+**MT-Bench-101 setup**
 
 | Parameter                 | Value         | Description                                 |
 | ------------------------- | ------------- | ------------------------------------------- |
@@ -64,6 +107,16 @@ We use the **MT-Bench-101** dataset, which contains 13 types of multi-turn dialo
 | Number of runs            | 1             | Each case runs once                         |
 | Consistency threshold     | 0.7           | Pass^1 determination threshold              |
 | Evaluation method         | LLM-eval      | Use LLM for semantic consistency evaluation |
+
+**QMSum setup**
+
+| Parameter                 | Value                                         |
+| ------------------------- | --------------------------------------------- |
+| Model                     | gpt-4o-mini                                   |
+| Summary trigger threshold | 40                                            |
+| Visible event window      | 20                                            |
+| Modes                     | `long_context`, `summary`, `summary_ondemand` |
+| Retrieval tools           | `session_search`, `session_load`              |
 
 ---
 
@@ -149,6 +202,30 @@ We use the **MT-Bench-101** dataset, which contains 13 types of multi-turn dialo
 | SA   |                 395 |                     829 |          0.95% |
 | SC   |                 355 |                     702 |         -0.50% |
 
+### 3.5 On-Demand Retrieval Under Summary Compression
+
+While MT-Bench-101 explains when session summarization is broadly beneficial, it does not directly isolate the hidden-detail problem introduced by summary compression. The QMSum results address that gap.
+
+**Table 5: QMSum Aggregate Results**
+
+| Metric            | Long Context |  Summary | Summary + On-Demand Retrieval |
+| ----------------- | -----------: | -------: | ----------------------------: |
+| ROUGE-L           |       0.1930 |   0.1516 |                        0.1770 |
+| F1                |       0.3132 |   0.2238 |                        0.2774 |
+| BLEU              |       0.2490 |   0.1651 |                        0.2351 |
+| Avg Prompt Tokens |       18,986 |      888 |                         3,857 |
+| Avg Query Latency |     4,556 ms | 2,994 ms |                      8,656 ms |
+
+Additional observations:
+
+- Summary availability rate is `100%`
+- Plain `summary` saves `94.78%` of prompt tokens versus `long_context`
+- `summary_ondemand` still saves `76.69%` of prompt tokens versus `long_context`
+- `summary_ondemand` improves ROUGE-L by `+0.0255` over plain `summary`
+- Per-case ROUGE-L comparison is `123` wins, `62` losses, and `4` ties
+
+The main takeaway is that summary compression creates a real quality gap, but on-demand retrieval recovers a meaningful portion of it while preserving large token savings.
+
 ---
 
 ## 4. Analysis
@@ -221,6 +298,18 @@ However, PI's Pass^1 is **96.6%**, indicating good semantic-level consistency. K
 
 TS tasks require recognizing user topic switches. When history is compressed by summarization, topic switch signals may be weakened, affecting model judgment. This indicates: **tasks requiring context completeness are not suitable for aggressive summarization**.
 
+#### 4.2.4 What Does QMSum Add Beyond MT-Bench-101?
+
+The QMSum results complement the MT-Bench-101 findings in an important way. MT-Bench-101 shows that summary can be beneficial in longer interactions and harmful in shorter ones, but it does not directly test a regime where important evidence has already been hidden by summary compression. QMSum does.
+
+On this broader hidden-detail workload, plain summary sharply reduces prompt cost but creates a measurable quality gap. `summary_ondemand` then recovers a meaningful portion of that loss:
+
+- ROUGE-L improves from `0.1516` to `0.1770`
+- F1 improves from `0.2238` to `0.2774`
+- the recovered share is about `61.5%` of the ROUGE-L loss and `59.9%` of the F1 loss caused by summary compression
+
+The gains are also closely tied to actual tool use: among cases where retrieval tools were invoked, average ROUGE-L gain is `+0.0315`, while cases without tool use are nearly flat. This suggests a practical architecture: use summary as the default compression mechanism, then use on-demand retrieval as the path for surfacing hidden details when they become relevant.
+
 ### 4.3 Experimental Limitations
 
 #### 4.3.1 Summary Generation Token Cost Not Counted
@@ -237,9 +326,17 @@ If this cost were included, the negative savings case proportion would likely be
 
 `-num-runs 1` makes Pass^k (k > 1) ineffective. LLM outputs have randomness, and single-run results may be unstable.
 
-#### 4.3.3 Dataset Has Short Dialogue Turns
+#### 4.3.3 MT-Bench-101 Has Short Dialogue Turns
 
 MT-Bench-101's average dialogue turns are 2~4, which differs from long dialogue scenarios in production environments. Summarization is better suited for longer dialogues; the current dataset may underestimate its potential.
+
+#### 4.3.4 QMSum Slice Is Targeted Rather Than Fully Global
+
+The QMSum results in this report come from a targeted hidden-detail slice (`ALL / specific / support_distance_from_end >= 80`) rather than the entire QMSum test set. This is appropriate for validating summary-hidden detail recovery, but the conclusions should still be framed as strong evidence for that workload, not as universal evidence across every QMSum setting.
+
+#### 4.3.5 Small Number of Tool-Call Failures Make Results Slightly Conservative
+
+In `4/189` QMSum cases, `session_load` failed with `anchor event not found` because the model passed transcript turn numbers instead of the exact event IDs returned by `session_search`. This is a localized tool-usage failure rather than a benchmark-wide validity problem. It slightly underestimates current on-demand performance, but it does not change the overall conclusion that `summary_ondemand` remains meaningfully better than plain `summary` on this workload.
 
 ---
 
@@ -255,17 +352,22 @@ Based on experimental results, we classify tasks into three categories:
 | **Conditionally Recommended** | Avg turns 3-4, Prompt 1000-2000 | CC, IC, GR    | Dynamic decision based on actual turns |
 | **Not Recommended**           | Avg turns ≤2, Prompt <1000      | SA, SC, TS    | Disable summarization                  |
 
-### 5.2 Future Research Directions
+For hidden-detail workloads where summary is already enabled and the question depends on early transcript evidence, the QMSum results suggest a fourth practical rule:
+
+- **Summary + On-Demand Retrieval Recommended**: when early evidence is likely to be hidden but still needed later, keep summary for compression and expose retrieval tools as the path for surfacing hidden context
+
+### 5.2 Next Optimization Directions
 
 1. **Add Summary Token Statistics**: Include summary generation cost in evaluation system
 2. **Long Dialogue Dataset Validation**: Use datasets with more conversation turns (e.g., 10+) to verify summarization effectiveness ceiling
 3. **Optimize Summary Prompt**: Current summary prompt may be too verbose; try simplification to reduce overhead
+4. **Optimize On-Demand Retrieval Cost**: Reduce redundant searches, tighten triggering, and shrink returned context windows for hidden-detail workloads
 
 ---
 
-## 6. Conclusion and Future Work
+## 6. Conclusion and Next Steps
 
-Through empirical study on the MT-Bench-101 dataset, this paper systematically evaluates the effectiveness of session summarization. Main conclusions are:
+Across MT-Bench-101 and QMSum, this report evaluates session summarization and summary-time detail recovery. Main conclusions are:
 
 1. **Summarization is Effective for Long Dialogues**: Tasks with average 4+ turns (SI, PI, CM) achieve 28%~40% prompt savings while maintaining over 85% response consistency.
 
@@ -274,6 +376,8 @@ Through empirical study on the MT-Bench-101 dataset, this paper systematically e
 3. **Triggering Strategy Needs Optimization**: Fixed `-events 2` is too aggressive for short dialogues. Recommend adopting dynamic strategies based on conversation turns or cumulative token count.
 
 4. **Evaluation System Needs Improvement**: Summary generation token cost should be included in total cost calculation to more accurately evaluate actual summarization benefits.
+
+5. **On-Demand Retrieval Helps with Summary-Hidden Detail Recovery**: On the broader QMSum hidden-detail workload, `summary_ondemand` improves ROUGE-L from 0.1516 to 0.1770 over plain `summary`, wins 123 of 189 cases, and recovers a meaningful portion of the quality gap to `long_context` while still saving 76.69% of prompt tokens.
 
 ---
 
@@ -328,6 +432,58 @@ Calculated using rule-based extraction + matching:
 ```
 Retention = Matched key info count / Total extracted key info count
 ```
+
+---
+
+### Appendix D: Raw QMSum Aggregate Output
+
+The tables below are extracted from the raw benchmark output file `qmsum_all_specific_hidden_full/results.json`.
+
+**Source metadata**
+
+| Field           | Value                                                     |
+| --------------- | --------------------------------------------------------- |
+| Timestamp       | `2026-04-13T20:44:50+08:00`                               |
+| Model           | `gpt-4o-mini`                                             |
+| Slice           | `test / ALL / specific / support_distance_from_end >= 80` |
+| Loaded Cases    | `244`                                                     |
+| Evaluated Cases | `189`                                                     |
+
+**Exact aggregate metrics**
+
+| Metric                        | Long Context |       Summary | Summary + On-Demand Retrieval |
+| ----------------------------- | -----------: | ------------: | ----------------------------: |
+| avg_rouge_1                   |     0.313242 |      0.223800 |                      0.277402 |
+| avg_rouge_2                   |     0.083403 |      0.043668 |                      0.067339 |
+| avg_rouge_l                   |     0.192977 |      0.151582 |                      0.177047 |
+| avg_f1                        |     0.313242 |      0.223800 |                      0.277402 |
+| avg_bleu                      |     0.249045 |      0.165136 |                      0.235089 |
+| avg_prompt_tokens             | 18985.560847 |    888.158730 |                   3857.417989 |
+| avg_completion_tokens         |   115.359788 |     59.708995 |                     81.624339 |
+| avg_total_tokens              | 19100.920635 |    947.867725 |                   3939.042328 |
+| avg_query_latency_ms          |  4555.767196 |   2993.597884 |                   8656.497354 |
+| avg_seed_duration_ms          |     1.391534 | 344655.544974 |                 343654.634921 |
+| avg_summary_build_duration_ms |            - |   6488.158730 |                   6193.825397 |
+| avg_summary_chars             |            - |   1776.079365 |                   1785.095238 |
+| summary_available_rate        |            - |      1.000000 |                      1.000000 |
+| avg_session_search_calls      |            - |             - |                      1.058201 |
+| avg_session_load_calls        |            - |             - |                      0.878307 |
+| prompt_savings_vs_long        |            - |    94.784062% |                    76.690768% |
+
+**Derived comparisons from the same raw file**
+
+| Derived metric               |                                                                           Value |
+| ---------------------------- | ------------------------------------------------------------------------------: |
+| wins_vs_summary              |                                                                             123 |
+| losses_vs_summary            |                                                                              62 |
+| ties_vs_summary              |                                                                               4 |
+| avg_rouge_l_gain_vs_summary  |                                                                        0.025465 |
+| tool_used_cases              |                                                                             154 |
+| tool_unused_cases            |                                                                              35 |
+| avg_gain_when_tool_used      |                                                                        0.031453 |
+| avg_gain_when_tool_unused    |                                                                       -0.000883 |
+| anchor_event_not_found_cases |                                                                               4 |
+| anchor_event_case_ids        | ES2004b_specific_04, Bro019_specific_04, Bro027_specific_05, Bro019_specific_06 |
 
 ---
 
