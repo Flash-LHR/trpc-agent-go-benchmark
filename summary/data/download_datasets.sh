@@ -5,6 +5,7 @@
 # Supported datasets:
 #   - MT-Bench-101: multi-turn dialogue benchmark for baseline vs summary
 #   - QMSum: long-meeting benchmark for long_context / summary / summary_ondemand
+#   - LongMemEval: multi-session user/assistant dialogue memory benchmark
 #
 
 set -euo pipefail
@@ -34,6 +35,9 @@ normalize_selector() {
             ;;
         qmsum)
             echo "qmsum"
+            ;;
+        longmemeval|lme)
+            echo "longmemeval"
             ;;
         *)
             return 1
@@ -90,6 +94,35 @@ download_qmsum() {
     echo "Manual source: https://github.com/Yale-LILY/QMSum"
 }
 
+download_longmemeval() {
+    local target_dir="$1/longmemeval-cleaned"
+    if [ -f "$target_dir/longmemeval_s_cleaned.json" ] && [ "$(wc -c < "$target_dir/longmemeval_s_cleaned.json")" -gt 1000 ]; then
+        echo "LongMemEval already exists at $target_dir, skipping."
+        return
+    fi
+
+    echo "=== Downloading LongMemEval ==="
+    mkdir -p "$target_dir"
+
+    local base_url="https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main"
+    local files=("longmemeval_s_cleaned.json" "longmemeval_oracle.json")
+
+    for file in "${files[@]}"; do
+        echo "  Downloading $file..."
+        if ! wget -q "$base_url/$file" -O "$target_dir/$file"; then
+            echo "Warning: failed to download $file"
+            rm -f "$target_dir/$file"
+        fi
+    done
+
+    if [ -f "$target_dir/longmemeval_s_cleaned.json" ]; then
+        echo "LongMemEval downloaded to $target_dir"
+    else
+        echo "Warning: failed to download LongMemEval automatically."
+        echo "Manual source: https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned"
+    fi
+}
+
 print_dataset_info() {
     local base_dir="$1"
 
@@ -110,6 +143,13 @@ print_dataset_info() {
         echo "  Location: $base_dir/QMSum"
         echo "  Test JSON files: $meeting_count"
     fi
+
+    if [ -f "$base_dir/longmemeval-cleaned/longmemeval_s_cleaned.json" ]; then
+        echo
+        echo "LongMemEval:"
+        echo "  Location: $base_dir/longmemeval-cleaned"
+        echo "  Files: longmemeval_s_cleaned.json, longmemeval_oracle.json"
+    fi
 }
 
 SELECTOR="$(normalize_selector "$DATASET_SELECTOR")" || {
@@ -125,12 +165,17 @@ case "$SELECTOR" in
         download_mtbench101 "$DATA_DIR"
         echo
         download_qmsum "$DATA_DIR"
+        echo
+        download_longmemeval "$DATA_DIR"
         ;;
     mtbench101)
         download_mtbench101 "$DATA_DIR"
         ;;
     qmsum)
         download_qmsum "$DATA_DIR"
+        ;;
+    longmemeval)
+        download_longmemeval "$DATA_DIR"
         ;;
 esac
 
@@ -145,3 +190,7 @@ echo
 echo "QMSum:"
 echo "  cd summary/trpc-agent-go-impl"
 echo "  go run . -dataset ../data/QMSum -dataset-format qmsum -qmsum-domain Committee -num-cases 5 -qmsum-visible-events 20 -qmsum-min-distance-from-end 80"
+echo
+echo "LongMemEval:"
+echo "  cd summary/trpc-agent-go-impl"
+echo "  PGVECTOR_DSN=\"postgres://...\" go run . -dataset ../data/longmemeval-cleaned/longmemeval_s_cleaned.json -dataset-format longmemeval -num-cases 5 -lme-visible-events 20"

@@ -19,6 +19,8 @@ func newBenchmark(cfg *appConfig) benchmark {
 	switch cfg.DatasetFormat {
 	case datasetFormatQMSum:
 		return newQMSumBenchmark(cfg)
+	case datasetFormatLongMemEval:
+		return newLongMemEvalBenchmark(cfg)
 	case datasetFormatMTBench101:
 		fallthrough
 	default:

@@ -22,8 +22,9 @@ import (
 type datasetFormat string
 
 const (
-	datasetFormatMTBench101 datasetFormat = "mtbench101"
-	datasetFormatQMSum      datasetFormat = "qmsum"
+	datasetFormatMTBench101  datasetFormat = "mtbench101"
+	datasetFormatQMSum       datasetFormat = "qmsum"
+	datasetFormatLongMemEval datasetFormat = "longmemeval"
 )
 
 type appConfig struct {
@@ -38,6 +39,7 @@ type appConfig struct {
 	Resume        bool
 	MTBench       mtBenchConfig
 	QMSum         qmsumConfig
+	LongMemEval   longMemEvalConfig
 }
 
 type mtBenchConfig struct {
@@ -60,6 +62,16 @@ type qmsumConfig struct {
 	SummaryWait        time.Duration
 	VisibleEvents      int
 	MinDistanceFromEnd int
+}
+
+type longMemEvalConfig struct {
+	QuestionTypes     string
+	PGVectorDSN       string
+	EmbedModel        string
+	MaxTokens         int
+	MaxToolIterations int
+	SummaryWait       time.Duration
+	VisibleEvents     int
 }
 
 var (
@@ -155,6 +167,17 @@ var (
 		0,
 		"Minimum support distance from transcript end for QMSum case selection (0 keeps all cases)",
 	)
+
+	flagLMEQuestionTypes = flag.String(
+		"lme-question-types",
+		"",
+		"LongMemEval question types to include (comma-separated; empty=all). Values: single-session-user, single-session-assistant, single-session-preference, multi-session, temporal-reasoning, knowledge-update",
+	)
+	flagLMEVisibleEvents = flag.Int(
+		"lme-visible-events",
+		20,
+		"Number of most recent turns kept visible in LongMemEval summary modes",
+	)
 )
 
 func loadAppConfig() (*appConfig, error) {
@@ -196,6 +219,15 @@ func loadAppConfig() (*appConfig, error) {
 			SummaryWait:        *flagQMSumSummaryWait,
 			VisibleEvents:      *flagQMSumVisibleEvents,
 			MinDistanceFromEnd: *flagQMSumMinDistanceFromEnd,
+		},
+		LongMemEval: longMemEvalConfig{
+			QuestionTypes:     strings.TrimSpace(*flagLMEQuestionTypes),
+			PGVectorDSN:       resolvePGVectorDSN(),
+			EmbedModel:        resolveEmbedModelName(),
+			MaxTokens:         *flagQMSumMaxTokens,
+			MaxToolIterations: *flagQMSumMaxToolIterations,
+			SummaryWait:       *flagQMSumSummaryWait,
+			VisibleEvents:     *flagLMEVisibleEvents,
 		},
 	}
 
@@ -318,9 +350,14 @@ func detectDatasetFormat(explicit, datasetPath string) datasetFormat {
 		return datasetFormatQMSum
 	case string(datasetFormatMTBench101):
 		return datasetFormatMTBench101
+	case string(datasetFormatLongMemEval):
+		return datasetFormatLongMemEval
 	}
 
 	lowerPath := strings.ToLower(strings.TrimSpace(datasetPath))
+	if strings.Contains(lowerPath, "longmemeval") {
+		return datasetFormatLongMemEval
+	}
 	if strings.Contains(lowerPath, "qmsum") {
 		return datasetFormatQMSum
 	}
