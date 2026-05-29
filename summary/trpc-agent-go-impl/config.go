@@ -28,18 +28,19 @@ const (
 )
 
 type appConfig struct {
-	ModelName     string
-	DatasetPath   string
-	DatasetFormat datasetFormat
-	NumCases      int
-	OutputDir     string
-	Events        int
-	UseLLMEval    bool
-	Verbose       bool
-	Resume        bool
-	MTBench       mtBenchConfig
-	QMSum         qmsumConfig
-	LongMemEval   longMemEvalConfig
+	ModelName      string
+	DatasetPath    string
+	DatasetFormat  datasetFormat
+	NumCases       int
+	OutputDir      string
+	Events         int
+	UseLLMEval     bool
+	Verbose        bool
+	Resume         bool
+	DetailedPrompt bool
+	MTBench        mtBenchConfig
+	QMSum          qmsumConfig
+	LongMemEval    longMemEvalConfig
 }
 
 type mtBenchConfig struct {
@@ -75,10 +76,15 @@ type longMemEvalConfig struct {
 }
 
 var (
-	flagModel   = flag.String("model", "", "Model name (env MODEL_NAME or gpt-4o-mini)")
-	flagDataset = flag.String("dataset", "../data/mt-bench-101", "Dataset path")
-	flagOutput  = flag.String("output", "../results", "Output directory")
-	flagEvents  = flag.Int("events", 2, "Event threshold for summarization")
+	flagModel          = flag.String("model", "", "Model name (env MODEL_NAME or gpt-4o-mini)")
+	flagDataset        = flag.String("dataset", "../data/mt-bench-101", "Dataset path")
+	flagOutput         = flag.String("output", "../results", "Output directory")
+	flagEvents         = flag.Int("events", 2, "Event threshold for summarization")
+	flagDetailedPrompt = flag.Bool(
+		"detailed-prompt",
+		true,
+		"Enable nine-section detailed continuity summary prompt + verbatim user-message preservation for summary modes",
+	)
 
 	flagNumCases   = flag.Int("num-cases", 0, "Number of test cases (0=all)")
 	flagVerbose    = flag.Bool("verbose", false, "Print full conversation content")
@@ -191,15 +197,16 @@ func loadAppConfig() (*appConfig, error) {
 	}
 
 	cfg := &appConfig{
-		ModelName:     resolveModelName(),
-		DatasetPath:   strings.TrimSpace(*flagDataset),
-		DatasetFormat: detectDatasetFormat(*flagDatasetFormat, *flagDataset),
-		NumCases:      *flagNumCases,
-		OutputDir:     *flagOutput,
-		Events:        *flagEvents,
-		UseLLMEval:    *flagUseLLMEval,
-		Verbose:       *flagVerbose,
-		Resume:        *flagResume,
+		ModelName:      resolveModelName(),
+		DatasetPath:    strings.TrimSpace(*flagDataset),
+		DatasetFormat:  detectDatasetFormat(*flagDatasetFormat, *flagDataset),
+		NumCases:       *flagNumCases,
+		OutputDir:      *flagOutput,
+		Events:         *flagEvents,
+		UseLLMEval:     *flagUseLLMEval,
+		Verbose:        *flagVerbose,
+		Resume:         *flagResume,
+		DetailedPrompt: *flagDetailedPrompt,
 		MTBench: mtBenchConfig{
 			TaskFilterRaw:        strings.TrimSpace(*flagTask),
 			TaskFilters:          taskFilters,

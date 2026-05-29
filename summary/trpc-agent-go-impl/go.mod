@@ -3,15 +3,12 @@ module trpc.group/trpc-go/trpc-agent-go-benchmark/summary/trpc-agent-go-impl
 go 1.24.1
 
 require (
-	trpc.group/trpc-go/trpc-agent-go v1.8.1
-	trpc.group/trpc-go/trpc-agent-go/evaluation v1.8.0
-	trpc.group/trpc-go/trpc-agent-go/session/pgvector v0.0.0-20260415031145-da25a4273afa
+	trpc.group/trpc-go/trpc-agent-go v1.9.0
+	trpc.group/trpc-go/trpc-agent-go/evaluation v1.9.0
+	trpc.group/trpc-go/trpc-agent-go/session/pgvector v1.9.0
 )
 
-replace (
-	trpc.group/trpc-go/trpc-agent-go => github.com/Rememorio/trpc-agent-go v0.0.0-20260415045338-9fa57ca5b570
-	trpc.group/trpc-go/trpc-agent-go/session/pgvector => github.com/Rememorio/trpc-agent-go/session/pgvector v0.0.0-20260415045338-9fa57ca5b570
-)
+replace trpc.group/trpc-go/trpc-agent-go => github.com/Rememorio/trpc-agent-go v0.0.0-20260526112250-2922f958f21b
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.9.1 // indirect

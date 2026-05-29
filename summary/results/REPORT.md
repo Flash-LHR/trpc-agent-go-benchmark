@@ -18,10 +18,11 @@ On a broader QMSum hidden-detail workload (`test / ALL / specific / support_dist
 
 On LongMemEval (`longmemeval_s_cleaned / single-session-user`), we additionally find:
 
-- **On-Demand Retrieval Surpasses Long Context**: at ~102K tokens, `summary_ondemand` achieves ROUGE-L 0.1711, exceeding `long_context`'s 0.1159 — the model gets lost in ultra-long context but precise retrieval finds the answer
-- **Extreme Token Efficiency**: `summary_ondemand` uses only 8.3% of the tokens while delivering 48% higher ROUGE-L than the full-context baseline
+- **Default Summary Requires Retrieval**: with the default summarizer prompt, plain `summary` is highly compressed (99.56% prompt savings) but loses most facts; `summary_ondemand` raises ROUGE-L from 0.0473 to 0.2486 while still saving 93.90% prompt tokens
+- **Detailed Continuity Summary is the Strongest Single Mode**: with `-detailed-prompt=true`, plain `summary` reaches ROUGE-L 0.2965, LLMScore 0.9179, and 80% exact match, outperforming both full context and default on-demand retrieval
+- **Retrieval Becomes Less Necessary When the Summary Preserves Verbatim User Facts**: detailed `summary_ondemand` reaches ROUGE-L 0.2595, close to detailed `summary`, because most answerable facts are already present in the detailed summary
 
-Overall, the MT-Bench-101 results tell us when summary is broadly worth enabling, the QMSum results tell us what happens after summary hides details and whether an on-demand retrieval path can recover them, and the LongMemEval results demonstrate that at extreme context lengths, on-demand retrieval becomes not just a recovery mechanism but the superior approach to answering questions about long conversation histories.
+Overall, the MT-Bench-101 results tell us when summary is broadly worth enabling, the QMSum results tell us what happens after summary hides details and whether an on-demand retrieval path can recover them, and the LongMemEval results demonstrate that at extreme context lengths, summary quality becomes decisive: a detailed continuity summary can outperform full context while still preserving large prompt savings, and on-demand retrieval is most valuable when the summary is intentionally compact.
 
 ---
 
@@ -42,7 +43,7 @@ For the QMSum study, we evaluate a **three-mode setup**:
 - **Summary**: Replaces older history with a summary
 - **Summary + On-Demand Retrieval**: Uses summary by default and allows the agent to call `session_search` and `session_load` against hidden history when hidden details need to be surfaced
 
-For the LongMemEval study, we evaluate the same **three-mode setup** as QMSum but on multi-session user/assistant dialogues. Each instance averages ~50 sessions and ~500 turns, totaling ~102K tokens per instance. This extends the evaluation to realistic conversational scales where the full context approaches the model's maximum window size.
+For the LongMemEval study, we evaluate the same **three-mode setup** as QMSum but on multi-session user/assistant dialogues. Each instance averages ~50 sessions and ~500 turns, totaling ~103K tokens per instance. This extends the evaluation to realistic conversational scales where the full context approaches the model's maximum window size.
 
 Together, the three settings answer connected questions: when summary is useful in general, whether hidden detail can be recovered once summary is enabled, and whether on-demand retrieval remains effective — or even becomes superior — at extreme context lengths.
 
@@ -105,11 +106,11 @@ This QMSum slice is designed so that supporting evidence lies sufficiently far f
 
 The third is **LongMemEval** (ICLR 2025), a benchmark for evaluating long-term memory in chat assistants. LongMemEval contains 500 questions across 6 question types, each backed by timestamped multi-session chat history. We evaluate the `single-session-user` slice (70 cases) from `longmemeval_s_cleaned.json`.
 
-The key difference from QMSum is twofold: LongMemEval uses real user/assistant role alternation (rather than all-user meeting transcript turns), and the average context per instance is ~102K tokens — approximately 5x longer than QMSum's ~19K tokens. This places it near the boundary of gpt-4o-mini's 128K context window.
+The key difference from QMSum is twofold: LongMemEval uses real user/assistant role alternation (rather than all-user meeting transcript turns), and the average context per instance is ~103K tokens — approximately 5x longer than QMSum's ~19K tokens. This places it near the boundary of gpt-4o-mini's 128K context window.
 
 | Variant | Cases | Question Type      | Avg Turns | Avg Sessions | Avg Tokens |
 | ------- | ----: | ------------------ | --------: | -----------: | ---------: |
-| S       |    70 | single-session-user |      ~500 |          ~50 |     ~102K |
+| S       |    70 | single-session-user |      ~500 |          ~50 |     ~103K |
 
 ### 2.4 Experimental Configuration
 
@@ -252,31 +253,29 @@ Additional observations:
 
 The main takeaway is that summary compression creates a real quality gap, but on-demand retrieval recovers a meaningful portion of it while preserving large token savings.
 
-### 3.6 On-Demand Retrieval on Multi-Session Dialogues (LongMemEval)
+### 3.6 Summary Prompt Ablation on Multi-Session Dialogues (LongMemEval)
 
-The QMSum results establish that on-demand retrieval recovers hidden details at medium context lengths (~19K tokens). LongMemEval extends this evaluation to realistic user/assistant conversations where total context averages ~102K tokens — near the boundary of the model's 128K context window. The question is whether on-demand retrieval remains effective at these extreme scales, or whether full context is needed for accurate recall.
+The QMSum results establish that on-demand retrieval recovers hidden details at medium context lengths (~19K tokens). LongMemEval extends this evaluation to realistic user/assistant conversations where total context averages ~103K tokens — near the boundary of the model's 128K context window. In this regime, we evaluate both the default compact summary and the detailed continuity summary (`-detailed-prompt=true`).
 
-**Table 6: LongMemEval Aggregate Results**
+**Table 6: LongMemEval Aggregate Results (single-session-user, 70 cases)**
 
-| Metric            | Long Context |  Summary | Summary + On-Demand Retrieval |
-| ----------------- | -----------: | -------: | ----------------------------: |
-| ROUGE-L           |       0.1159 |   0.0440 |                        0.1711 |
-| F1                |       0.1210 |   0.0547 |                        0.1762 |
-| BLEU              |       0.0713 |   0.0370 |                        0.1089 |
-| Avg Prompt Tokens |      102,085 |    4,352 |                         8,518 |
-| Avg Query Latency |    10,638 ms | 4,619 ms |                     10,222 ms |
+| Configuration | Mode | ROUGE-L | F1 | BLEU | LLMScore | Exact Match | Avg Prompt Tokens | Prompt Savings | Avg Summary Chars | Avg Query Latency |
+| ------------- | ---- | ------: | -: | ---: | -------: | ----------: | ----------------: | -------------: | ----------------: | ----------------: |
+| Full context | `long_context` | 0.1168 | 0.1225 | 0.0726 | 0.7357 | 0.6571 | 103,565 | — | 0 | 10,597 ms |
+| Default prompt | `summary` | 0.0473 | 0.0563 | 0.0410 | 0.0771 | 0.0143 | 457 | 99.56% | 1,749 | 3,502 ms |
+| Default prompt | `summary_ondemand` | 0.2486 | 0.2563 | 0.1641 | 0.8471 | 0.7286 | 6,308 | 93.90% | 1,669 | 10,581 ms |
+| Detailed prompt | `summary` | **0.2965** | **0.3014** | **0.1966** | **0.9179** | **0.8000** | 17,611 | 83.00% | 74,960 | 8,303 ms |
+| Detailed prompt | `summary_ondemand` | 0.2595 | 0.2660 | 0.1692 | 0.8900 | 0.7714 | 19,731 | 80.95% | 75,162 | 11,322 ms |
 
 Key observations:
 
-- `summary` saves 95.7% of prompt tokens versus `long_context`
-- `summary_ondemand` saves 91.7% of prompt tokens versus `long_context`
-- `summary_ondemand` improves ROUGE-L by `+0.1271` over plain `summary`
-- Per-case ROUGE-L comparison (OnDemand vs Summary): `49` wins, `8` losses, `13` ties
-- Per-case ROUGE-L comparison (OnDemand vs Long Context): `43` wins, `19` losses, `8` ties
+- The default compact `summary` is extremely cheap (457 prompt tokens on average) but too lossy for direct long-term memory recall.
+- Default `summary_ondemand` recovers most of the lost quality, raising ROUGE-L from `0.0473` to `0.2486` while retaining `93.90%` prompt-token savings versus full context.
+- Detailed `summary` is the strongest single mode: ROUGE-L `0.2965`, LLMScore `0.9179`, and exact match `0.8000`, while still saving `83.00%` prompt tokens versus full context.
+- Detailed `summary` improves exact match on 55 of 70 cases compared with default `summary`, with no exact-match regressions.
+- Once the detailed summary is available, on-demand retrieval adds little: detailed `summary_ondemand` is slightly lower than detailed `summary` on ROUGE-L (`0.2595` vs `0.2965`) and exact match (`0.7714` vs `0.8000`).
 
-The most striking finding is that `summary_ondemand` not only recovers lost details but **surpasses** `long_context` in answer quality. At ~102K tokens, the long-context baseline achieves only ROUGE-L 0.1159, while on-demand retrieval reaches 0.1711 — a 48% improvement. This reversal does not occur on QMSum (~19K tokens), where long context remains the quality ceiling.
-
-**Why does on-demand retrieval beat long context?** At ~102K tokens (near gpt-4o-mini's 128K limit), the model struggles with needle-in-haystack retrieval across dozens of sessions. When the entire conversation history is placed in context, the model must identify which of ~50 sessions and ~500 turns contains the answer. The sheer volume of irrelevant context dilutes attention and leads to incorrect or vague answers. A typical failure pattern: the question "How long was I in Japan?" — the long-context mode answers "a week" (wrong), while on-demand retrieval locates the correct session and answers "two weeks." On-demand retrieval wins 43 of 70 cases against long context, while long context wins only 19 — a decisive margin.
+The main takeaway is that LongMemEval separates two operating modes. If the summary is intentionally compact, on-demand retrieval is essential and provides the best quality/cost tradeoff. If the summary can include a detailed continuity structure and verbatim user-message appendix, the summary itself becomes the strongest recall mechanism and often makes retrieval unnecessary.
 
 ### 3.7 Tool Trace Analysis
 
@@ -334,32 +333,23 @@ One caveat: 4 of 189 cases had `session_load` failures (`anchor event not found`
 
 #### 3.7.2 LongMemEval Retrieval Patterns
 
-LongMemEval shows a markedly different pattern. Of 70 cases, 54 invoked at least one retrieval tool, while 16 did not. The dominant path is **search only** — no load needed:
+LongMemEval shows two distinct retrieval regimes depending on summary style. With the default compact prompt, 69 of 70 cases invoke `session_search`, and 21 cases also invoke `session_load`. The default summary is very small (~1.7K characters), so the model relies on retrieval tools to recover hidden facts. With the detailed continuity prompt, only 14 of 70 cases invoke search and no cases invoke load, because the summary itself already contains the relevant user facts.
 
-| Metric                                    | LongMemEval |
-| ----------------------------------------- | ----------: |
-| Total cases                               |          70 |
-| Cases with tool traces                    |          54 |
-| Cases without tool traces                 |          16 |
-| Cases with search only (no load)          |          40 |
-| Cases with search + load                  |          14 |
-| Total `session_search` calls              |          57 |
-| Total `session_load` calls                |          14 |
-| Avg total tool calls per case             |        1.01 |
+| Metric | Default Prompt | Detailed Prompt |
+| ------ | -------------: | --------------: |
+| Total cases | 70 | 70 |
+| Cases with at least one `session_search` | 69 | 14 |
+| Cases with at least one `session_load` | 21 | 0 |
+| Total `session_search` calls | 81 | 23 |
+| Total `session_load` calls | 22 | 0 |
+| Avg search calls per case | 1.16 | 0.33 |
+| Avg load calls per case | 0.31 | 0.00 |
+| ROUGE-L gain of on-demand vs summary | +0.2013 | -0.0370 |
+| Exact-match gain of on-demand vs summary | +0.7143 | -0.0286 |
 
-Among the 54 tool-using cases, 40 used only `session_search` (74% of traced cases), and 14 used both search and load (26%). This is a structural inversion: on QMSum, 92% of traced cases required load; on LongMemEval, 74% did not.
+Under the default prompt, retrieval is clearly beneficial: `summary_ondemand` improves ROUGE-L from `0.0473` to `0.2486` and exact match from `0.0143` to `0.7286`. Under the detailed prompt, retrieval is mostly redundant: plain `summary` already reaches exact match `0.8000`, and adding tools slightly reduces average ROUGE-L and exact match.
 
-Quality gain by tool-use pattern:
-
-| Pattern              | Cases | Avg ROUGE-L Gain vs Summary |
-| -------------------- | ----: | --------------------------: |
-| Search only          |    40 |                     +0.1708 |
-| Search + Load        |    14 |                     +0.1502 |
-| No tools             |    16 |                     -0.0023 |
-
-Both search-only and search+load paths contribute large positive gains. The search-only gain (+0.1708) is particularly notable — on QMSum, search-only cases averaged -0.0135, meaning search without load was actually harmful.
-
-An example illustrates the search-only pattern. In `001be529`, the question asks: "How long did I wait for the decision on my asylum application?" Plain `summary` answers that it has no access to this information (ROUGE-L 0.0000). `summary_ondemand` calls `session_search` with `asylum application decision wait time`, which locates a passage where the user discussed their asylum approval. The model answers "over a year" directly from the search snippet — no `session_load` needed. ROUGE-L rises to 0.2000.
+This makes LongMemEval a useful stress test for both strategies. Compact summaries need on-demand retrieval to regain missing facts; detailed continuity summaries preserve enough factual state that the model can answer directly.
 
 #### 3.7.3 Why Retrieval Patterns Differ
 
@@ -378,16 +368,16 @@ In QMSum, a search hit returns a single short meeting utterance — insufficient
 
 **Summary of tool-use patterns across datasets:**
 
-| Metric                     |   QMSum | LongMemEval |
-| -------------------------- | ------: | ----------: |
-| Avg search calls per case  |    1.06 |        0.81 |
-| Avg load calls per case    |    0.88 |        0.20 |
-| Total calls per case       |    1.94 |        1.01 |
-| Search-only % of traced    |    7.8% |       74.1% |
-| Gain (search only)         | -0.0135 |      +0.1708|
-| Gain (search+load)         | +0.0353 |      +0.1502|
+| Metric | QMSum | LongMemEval Default | LongMemEval Detailed |
+| ------ | ----: | ------------------: | -------------------: |
+| Avg search calls per case | 1.06 | 1.16 | 0.33 |
+| Avg load calls per case | 0.88 | 0.31 | 0.00 |
+| Total calls per case | 1.94 | 1.47 | 0.33 |
+| Cases with any search | 154 | 69 | 14 |
+| Cases with any load | 142 | 21 | 0 |
+| On-demand ROUGE-L gain | +0.0255 | +0.2013 | -0.0370 |
 
-This comparison suggests a practical guideline: for applications with short-grained events (meeting transcripts, chat logs with brief messages), the search-then-load pattern is expected; for applications with coarse-grained events (multi-turn assistant dialogues), search alone is often sufficient.
+This comparison suggests a practical guideline: for applications with short-grained events (meeting transcripts, chat logs with brief messages), the search-then-load pattern is expected; for applications with coarse-grained events (multi-turn assistant dialogues), search alone is often sufficient. When the summary already preserves detailed continuity and verbatim user facts, retrieval can become unnecessary for many recall questions.
 
 ---
 
@@ -471,21 +461,21 @@ On QMSum (~19K tokens), plain summary sharply reduces prompt cost but creates a 
 - F1 improves from `0.2238` to `0.2774`
 - the recovered share is about `61.5%` of the ROUGE-L loss and `59.9%` of the F1 loss caused by summary compression
 
-On LongMemEval (~102K tokens), the picture shifts further: on-demand retrieval does not merely recover lost quality — it surpasses full-context performance entirely. ROUGE-L improves from `0.1159` (long context) to `0.1711` (summary + on-demand), a 48% gain. This indicates that at extreme context lengths, the model's ability to locate relevant information within the full context degrades, and targeted retrieval becomes the superior strategy.
+On LongMemEval (~103K tokens), the picture shifts further and depends on the summary style. With the default compact prompt, plain summary is very cheap but too lossy, and on-demand retrieval is the main quality mechanism: ROUGE-L improves from `0.0473` to `0.2486`. With the detailed continuity prompt, the summary itself becomes the strongest mode: ROUGE-L reaches `0.2965`, exceeding both full context (`0.1168`) and default on-demand (`0.2486`).
 
-Together, QMSum and LongMemEval show that the value of on-demand retrieval increases with context length. At medium context (~19K tokens), it recovers about 61% of the quality lost to summary compression. At extreme context (~102K tokens), it exceeds what full context can achieve. This pattern suggests a practical guideline: the longer the conversation, the more important on-demand retrieval becomes.
+Together, QMSum and LongMemEval show two complementary strategies. At medium context (~19K tokens), on-demand retrieval recovers details hidden by summary compression. At extreme context (~103K tokens), either retrieval or a detailed continuity summary can beat full context; the best choice depends on the desired cost/quality tradeoff.
 
-#### 4.2.5 Why Does On-Demand Retrieval Surpass Long Context on LongMemEval?
+#### 4.2.5 Why Can Summary-Based Modes Surpass Long Context on LongMemEval?
 
-The LongMemEval results present an apparent paradox: providing the model with more context (the full ~102K-token history) yields worse answers than giving it a compressed summary plus a retrieval mechanism. Three factors explain this:
+The LongMemEval results present an apparent paradox: providing the model with more context (the full ~103K-token history) yields worse answers than summary-based modes. Three factors explain this:
 
-1. **Attention dilution at scale**: At 102K tokens (near gpt-4o-mini's 128K limit), the model must attend across ~50 sessions and ~500 turns. The relevant evidence typically occupies fewer than 200 tokens within that span. The model's effective attention is diluted across the vast irrelevant majority, leading to missed or confused answers.
+1. **Attention dilution at scale**: At ~103K tokens (near gpt-4o-mini's 128K limit), the model must attend across ~50 sessions and ~500 turns. The relevant evidence typically occupies fewer than 200 tokens within that span. The model's effective attention is diluted across the vast irrelevant majority, leading to missed or confused answers.
 
-2. **Focused retrieval window**: On-demand retrieval gives the model a focused ~8.5K-token window consisting of the summary (~4.4K tokens) plus retrieved snippets (~4.1K additional tokens). This focused window contains exactly the relevant evidence, allowing the model to concentrate its capacity on generating an accurate answer rather than searching through context.
+2. **Focused retrieval or focused summary state**: Default `summary_ondemand` gives the model a small prompt plus targeted retrieved snippets, while detailed `summary` gives the model a structured continuity document with preserved user facts. Both paths concentrate context around the information needed for recall.
 
-3. **Search precision**: The `session_search` tool operates over indexed hidden history with purpose-built retrieval logic. It can locate the relevant passage more reliably than the model's internal attention mechanism can identify the same passage within 102K tokens of raw context.
+3. **Explicit factual preservation**: The detailed continuity prompt keeps a nine-section work-state summary and a verbatim user-message appendix. This raises prompt cost compared with the default summary, but it preserves factual user statements that the default compact summary discards.
 
-This pattern is expected to strengthen as conversation history grows even longer. As context exceeds the model's effective processing range, the gap between full-context performance and retrieval-augmented performance should widen further. LongMemEval at 102K tokens is likely the beginning of this curve, not its maximum.
+This pattern is expected to strengthen as conversation history grows longer. As context exceeds the model's effective processing range, raw long-context recall degrades; either targeted retrieval or explicit continuity-state preservation becomes necessary.
 
 ### 4.3 Experimental Limitations
 
@@ -535,14 +525,15 @@ Based on experimental results, we classify tasks into three categories:
 
 For hidden-detail workloads where summary is already enabled and the question depends on early transcript evidence, the QMSum and LongMemEval results suggest additional practical rules:
 
-- **Summary + On-Demand Retrieval Recommended**: when early evidence is likely to be hidden but still needed later, keep summary for compression and expose retrieval tools as the path for surfacing hidden context
-- **For conversations exceeding ~50K tokens, on-demand retrieval is not just recommended for hidden-detail recovery but becomes the primary quality strategy, as full-context performance degrades.**
+- **Default Summary + On-Demand Retrieval Recommended**: when the summary must stay compact, keep summary for compression and expose retrieval tools as the path for surfacing hidden context
+- **Detailed Continuity Summary Recommended for Long-Term Chat Memory**: when higher prompt cost is acceptable, use a detailed continuity prompt with verbatim user-message preservation; on LongMemEval this is the strongest single mode
+- **For conversations exceeding ~50K tokens, avoid relying on raw full context alone**: use either targeted retrieval or detailed continuity summaries, because full-context recall degrades at extreme lengths.
 
 ### 5.2 Next Optimization Directions
 
 1. **Add Summary Token Statistics**: Include summary generation cost in evaluation system
-2. **Long Dialogue Dataset Validation**: Partially addressed by LongMemEval's ~102K-token dialogues for the single-session-user question type. Multi-session and temporal-reasoning question types still need evaluation to confirm the pattern generalizes across all LongMemEval categories.
-3. **Optimize Summary Prompt**: Current summary prompt may be too verbose; try simplification to reduce overhead
+2. **Long Dialogue Dataset Validation**: Partially addressed by LongMemEval's ~103K-token dialogues for the single-session-user question type. Multi-session and temporal-reasoning question types still need evaluation to confirm the pattern generalizes across all LongMemEval categories.
+3. **Choose Summary Prompt by Workload**: use compact default summaries when retrieval tools are available and token cost is critical; use detailed continuity summaries for high-accuracy long-term chat memory
 4. **Optimize On-Demand Retrieval Cost**: Reduce redundant searches, tighten triggering, and shrink returned context windows for hidden-detail workloads
 
 ---
@@ -561,7 +552,7 @@ Across MT-Bench-101, QMSum, and LongMemEval, this report evaluates session summa
 
 5. **On-Demand Retrieval Helps with Summary-Hidden Detail Recovery**: On the broader QMSum hidden-detail workload, `summary_ondemand` improves ROUGE-L from 0.1516 to 0.1770 over plain `summary`, wins 123 of 189 cases, and recovers a meaningful portion of the quality gap to `long_context` while still saving 76.69% of prompt tokens.
 
-6. **On-Demand Retrieval Becomes Essential at Extreme Context Lengths**: On LongMemEval's ~102K-token dialogues, `summary_ondemand` surpasses even `long_context` (ROUGE-L 0.1711 vs 0.1159), winning 43 of 70 cases. At these scales, targeted retrieval is not a fallback — it is the primary quality mechanism.
+6. **Long-Term Memory Needs Either Retrieval or Detailed Continuity Summaries**: On LongMemEval's ~103K-token dialogues, compact default summary needs on-demand retrieval (ROUGE-L 0.2486), while detailed continuity summary is the strongest single mode (ROUGE-L 0.2965, LLMScore 0.9179, exact match 0.8000). Both outperform raw long context on recall quality while preserving substantial prompt savings.
 
 ---
 
@@ -673,48 +664,38 @@ The tables below are extracted from the raw benchmark output file `qmsum_all_spe
 
 ### Appendix E: Raw LongMemEval Aggregate Output
 
-The tables below are extracted from the raw benchmark output file `longmemeval_single_session_user/results.json`.
+The tables below summarize the latest LongMemEval benchmark runs for the default and detailed summary prompts.
 
 **Source metadata**
 
-| Field           | Value                              |
-| --------------- | ---------------------------------- |
-| Model           | `gpt-4o-mini`                      |
-| Dataset         | `longmemeval_s_cleaned.json`       |
-| Question Type   | `single-session-user`              |
-| Evaluated Cases | `70`                               |
+| Field | Value |
+| ----- | ----- |
+| Model | `gpt-4o-mini` |
+| Dataset | `longmemeval_s_cleaned.json` |
+| Question Type | `single-session-user` |
+| Evaluated Cases | `70` |
 
 **Exact aggregate metrics**
 
-| Metric                   | Long Context |    Summary | Summary + On-Demand Retrieval |
-| ------------------------ | -----------: | ---------: | ----------------------------: |
-| avg_rouge_l              |     0.115900 |   0.044000 |                      0.171100 |
-| avg_f1                   |     0.121000 |   0.054700 |                      0.176200 |
-| avg_bleu                 |     0.071300 |   0.037000 |                      0.108900 |
-| avg_prompt_tokens        |   102085     |   4352     |                      8518     |
-| avg_query_latency_ms     |    10638     |   4619     |                     10222     |
-| prompt_savings_vs_long   |            - |     95.74% |                        91.66% |
+| Configuration | Mode | avg_rouge_l | avg_f1 | avg_bleu | avg_llm_score | avg_exact_match | avg_prompt_tokens | avg_query_latency_ms |
+| ------------- | ---- | ----------: | -----: | -------: | ------------: | --------------: | ----------------: | -------------------: |
+| Full context | `long_context` | 0.1168 | 0.1225 | 0.0726 | 0.7357 | 0.6571 | 103,565 | 10,597 |
+| Default prompt | `summary` | 0.0473 | 0.0563 | 0.0410 | 0.0771 | 0.0143 | 457 | 3,502 |
+| Default prompt | `summary_ondemand` | 0.2486 | 0.2563 | 0.1641 | 0.8471 | 0.7286 | 6,308 | 10,581 |
+| Detailed prompt | `summary` | 0.2965 | 0.3014 | 0.1966 | 0.9179 | 0.8000 | 17,611 | 8,303 |
+| Detailed prompt | `summary_ondemand` | 0.2595 | 0.2660 | 0.1692 | 0.8900 | 0.7714 | 19,731 | 11,322 |
 
 **Derived comparisons**
 
-| Derived metric                    |  Value |
-| --------------------------------- | -----: |
-| wins_vs_summary (OnDemand)        |     49 |
-| losses_vs_summary (OnDemand)      |      8 |
-| ties_vs_summary (OnDemand)        |     13 |
-| wins_vs_long_context (OnDemand)   |     43 |
-| losses_vs_long_context (OnDemand) |     19 |
-| ties_vs_long_context (OnDemand)   |      8 |
-| avg_rouge_l_gain_vs_summary       | 0.1271 |
-| avg_session_search_calls          |   0.81 |
-| avg_session_load_calls            |   0.20 |
-| avg_total_tool_calls              |  ~1.01 |
-| tool_used_cases                   |     54 |
-| tool_unused_cases                 |     16 |
-| search_only_cases                 |     40 |
-| search_and_load_cases             |     14 |
-| avg_gain_search_only              | 0.1655 |
-| avg_gain_no_tools                 | -0.0023 |
+| Derived metric | Default Prompt | Detailed Prompt |
+| -------------- | -------------: | --------------: |
+| prompt_savings_summary_vs_long | 99.56% | 83.00% |
+| prompt_savings_ondemand_vs_long | 93.90% | 80.95% |
+| rouge_l_gain_ondemand_vs_summary | +0.2013 | -0.0370 |
+| avg_session_search_calls | 1.16 | 0.33 |
+| avg_session_load_calls | 0.31 | 0.00 |
+| cases_with_search | 69 | 14 |
+| cases_with_load | 21 | 0 |
 
 ---
 

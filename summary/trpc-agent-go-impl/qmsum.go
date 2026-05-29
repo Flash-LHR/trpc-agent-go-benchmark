@@ -176,6 +176,10 @@ func (b *QMSumBenchmark) Run(ctx context.Context) error {
 	log.Printf("Output: %s", b.cfg.OutputDir)
 	log.Printf("Event Threshold: %d", b.cfg.Events)
 	log.Printf("Visible Events: %d", b.cfg.QMSum.VisibleEvents)
+	logDetailedPromptConfig(b.cfg.DetailedPrompt)
+	log.Printf("Agent options applied to summary/ondemand modes:")
+	log.Printf("  - llmagent.WithAddSessionSummary(true)")
+	log.Printf("  - llmagent.WithMessageBranchFilterMode(BranchFilterModeAll)")
 	log.Printf("Min Support Distance From End: %d", b.cfg.QMSum.MinDistanceFromEnd)
 	log.Printf("LLM Evaluation: %v", b.cfg.UseLLMEval)
 
@@ -378,17 +382,13 @@ func (b *QMSumBenchmark) createQMSumSummaryService(
 
 	embedModelName := b.cfg.QMSum.EmbedModel
 	emb := newQMSumEmbeddingEmbedder(embedModelName)
-	sum := sessionsummary.NewSummarizer(
-		llm,
-		sessionsummary.WithChecksAny(
-			sessionsummary.CheckEventThreshold(b.cfg.Events),
-		),
-	)
+	sum := sessionsummary.NewSummarizer(llm, summaryOptions(b.cfg)...)
 
 	log.Printf(
-		"Creating QMSum pgvector session service (embed_model=%s, visible_events=%d)",
+		"Creating QMSum pgvector session service (embed_model=%s, visible_events=%d, detailed_prompt=%v)",
 		embedModelName,
 		b.cfg.QMSum.VisibleEvents,
+		b.cfg.DetailedPrompt,
 	)
 
 	return sessionpgvector.NewService(
@@ -591,7 +591,10 @@ func (b *QMSumBenchmark) newQMSumAgent(
 	}
 
 	if mode == qmsumModeSummary || mode == qmsumModeOnDemand {
-		opts = append(opts, llmagent.WithAddSessionSummary(true))
+		opts = append(opts,
+			llmagent.WithAddSessionSummary(true),
+			llmagent.WithMessageBranchFilterMode(llmagent.BranchFilterModeAll),
+		)
 	}
 	if mode == qmsumModeOnDemand {
 		opts = append(opts,
@@ -638,7 +641,7 @@ func seedQMSumTranscript(
 		)
 		evt := event.New(
 			fmt.Sprintf("%s-%04d", key.SessionID, i),
-			"qmsum-seed",
+			"user",
 			event.WithResponse(&model.Response{
 				Done: true,
 				Choices: []model.Choice{

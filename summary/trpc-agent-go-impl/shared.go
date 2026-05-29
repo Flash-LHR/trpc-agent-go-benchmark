@@ -11,11 +11,13 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"strconv"
 	"strings"
 
 	"trpc.group/trpc-go/trpc-agent-go/event"
 	"trpc.group/trpc-go/trpc-agent-go/model"
+	sessionsummary "trpc.group/trpc-go/trpc-agent-go/session/summary"
 )
 
 // TokenUsage stores detailed token usage for a single LLM call.
@@ -35,6 +37,30 @@ type ToolTrace struct {
 	Name      string `json:"name,omitempty"`
 	Arguments string `json:"arguments,omitempty"`
 	Response  string `json:"response,omitempty"`
+}
+
+func summaryOptions(cfg *appConfig) []sessionsummary.Option {
+	opts := []sessionsummary.Option{
+		sessionsummary.WithChecksAny(
+			sessionsummary.CheckEventThreshold(cfg.Events),
+		),
+	}
+	if cfg.DetailedPrompt {
+		opts = append(opts, sessionsummary.WithDetailedContinuityPrompt())
+	}
+	return opts
+}
+
+func logDetailedPromptConfig(enabled bool) {
+	if enabled {
+		log.Printf("Detailed Continuity Prompt: true")
+		log.Printf("  - sessionsummary.WithDetailedContinuityPrompt() enabled:")
+		log.Printf("    * nine-section structured summary prompt")
+		log.Printf("    * <analysis> scratchpad stripped from persisted summary")
+		log.Printf("    * verbatim user-message appendix appended to summary")
+		return
+	}
+	log.Printf("Detailed Continuity Prompt: false (using framework default summarizer prompt)")
 }
 
 func (s *ToolCallStats) increment(toolName string) {

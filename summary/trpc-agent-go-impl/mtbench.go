@@ -32,7 +32,7 @@ import (
 	"trpc.group/trpc-go/trpc-agent-go/model/openai"
 	"trpc.group/trpc-go/trpc-agent-go/runner"
 	"trpc.group/trpc-go/trpc-agent-go/session/inmemory"
-	"trpc.group/trpc-go/trpc-agent-go/session/summary"
+	sessionsummary "trpc.group/trpc-go/trpc-agent-go/session/summary"
 )
 
 type mtBenchRunMode string
@@ -366,10 +366,7 @@ func (e *mtBenchEvaluator) runOnce(
 	var sessService *inmemory.SessionService
 	withSummary := mode == mtBenchModeSummary
 	if withSummary {
-		sum := summary.NewSummarizer(
-			e.llm,
-			summary.WithChecksAny(summary.CheckEventThreshold(e.cfg.Events)),
-		)
+		sum := sessionsummary.NewSummarizer(e.llm, summaryOptions(e.cfg)...)
 		sessService = inmemory.NewSessionService(
 			inmemory.WithSummarizer(sum),
 			inmemory.WithAsyncSummaryNum(1),
@@ -380,14 +377,22 @@ func (e *mtBenchEvaluator) runOnce(
 		sessService = inmemory.NewSessionService()
 	}
 
-	ag := llmagent.New(
-		"eval-agent",
+	agOpts := []llmagent.Option{
 		llmagent.WithModel(e.llm),
 		llmagent.WithGenerationConfig(model.GenerationConfig{
 			Stream:    false,
 			MaxTokens: intPtr(2000),
 		}),
 		llmagent.WithAddSessionSummary(withSummary),
+	}
+	if withSummary {
+		agOpts = append(agOpts,
+			llmagent.WithMessageBranchFilterMode(llmagent.BranchFilterModeAll),
+		)
+	}
+	ag := llmagent.New(
+		"eval-agent",
+		agOpts...,
 	)
 
 	r := runner.NewRunner("eval-app", ag, runner.WithSessionService(sessService))

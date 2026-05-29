@@ -82,10 +82,11 @@ go run . \
 |------|---------|-------------|
 | `-model` | `gpt-4o-mini` | Model name (`MODEL_NAME` overrides default) |
 | `-dataset` | `../data/mt-bench-101` | Dataset path |
-| `-dataset-format` | auto | `mtbench101` or `qmsum` |
+| `-dataset-format` | auto | `mtbench101`, `qmsum`, or `longmemeval` |
 | `-num-cases` | `0` | Number of cases to run (`0` = all) |
 | `-output` | `../results` | Output directory |
 | `-events` | `2` | Summary trigger event threshold |
+| `-detailed-prompt` | `true` | Enable the nine-section detailed continuity prompt and verbatim user-message appendix for all summary modes |
 | `-llm-eval` | `false` | Enable LLM-based evaluation where supported |
 | `-resume` | `false` | Resume from checkpoint |
 | `-verbose` | `false` | Print detailed conversation logs |
@@ -114,6 +115,13 @@ go run . \
 | `-qmsum-summary-wait` | `45s` | Max wait time for async summary generation |
 | `-qmsum-visible-events` | `20` | Number of most recent transcript turns kept directly visible in `summary` / `summary_ondemand` |
 | `-qmsum-min-distance-from-end` | `0` | Minimum support distance from the transcript end; useful for a harder hidden-detail subset |
+
+### LongMemEval Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-lme-question-types` | `""` | LongMemEval question types to include (empty = all) |
+| `-lme-visible-events` | `20` | Number of most recent turns kept directly visible in LongMemEval summary modes |
 
 ## What Each Dataset Measures
 

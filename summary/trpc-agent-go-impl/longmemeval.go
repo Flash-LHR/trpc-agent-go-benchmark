@@ -38,6 +38,7 @@ const (
 	lmeAppSummary     = "summary-lme-summary"
 	lmeAppOnDemand    = "summary-lme-ondemand"
 	lmeTablePrefix    = "summary_lme"
+	lmeAgentName      = "lme-eval-agent"
 )
 
 type lmeRunMode string
@@ -112,6 +113,8 @@ type LMEAggregate struct {
 	AvgSummaryBuildDurationMs float64 `json:"avg_summary_build_duration_ms,omitempty"`
 	AvgQueryLatencyMs         float64 `json:"avg_query_latency_ms,omitempty"`
 	AvgSummaryChars           float64 `json:"avg_summary_chars,omitempty"`
+	MaxSummaryChars           int     `json:"max_summary_chars,omitempty"`
+	MaxPromptTokens           int     `json:"max_prompt_tokens,omitempty"`
 	SummaryAvailableRate      float64 `json:"summary_available_rate,omitempty"`
 	AvgSessionSearchCalls     float64 `json:"avg_session_search_calls,omitempty"`
 	AvgSessionLoadCalls       float64 `json:"avg_session_load_calls,omitempty"`
@@ -156,6 +159,10 @@ func (b *LongMemEvalBenchmark) Run(ctx context.Context) error {
 	log.Printf("Output: %s", b.cfg.OutputDir)
 	log.Printf("Event Threshold: %d", b.cfg.Events)
 	log.Printf("Visible Events: %d", b.cfg.LongMemEval.VisibleEvents)
+	logDetailedPromptConfig(b.cfg.DetailedPrompt)
+	log.Printf("Agent options applied to summary/ondemand modes:")
+	log.Printf("  - llmagent.WithAddSessionSummary(true)")
+	log.Printf("  - llmagent.WithMessageBranchFilterMode(BranchFilterModeAll)  // see seedLongMemEvalSession comment")
 	log.Printf("LLM Evaluation: %v", b.cfg.UseLLMEval)
 
 	instances, err := dataset.LoadLongMemEval(b.cfg.DatasetPath)
@@ -280,17 +287,13 @@ func (b *LongMemEvalBenchmark) createLMESummaryService(
 
 	embedModelName := b.cfg.LongMemEval.EmbedModel
 	emb := newLMEEmbeddingEmbedder(embedModelName)
-	sum := sessionsummary.NewSummarizer(
-		llm,
-		sessionsummary.WithChecksAny(
-			sessionsummary.CheckEventThreshold(b.cfg.Events),
-		),
-	)
+	sum := sessionsummary.NewSummarizer(llm, summaryOptions(b.cfg)...)
 
 	log.Printf(
-		"Creating LME pgvector session service (embed_model=%s, visible_events=%d)",
+		"Creating LME pgvector session service (embed_model=%s, visible_events=%d, detailed_prompt=%v)",
 		embedModelName,
 		b.cfg.LongMemEval.VisibleEvents,
+		b.cfg.DetailedPrompt,
 	)
 
 	return sessionpgvector.NewService(
@@ -465,6 +468,12 @@ func (b *LongMemEvalBenchmark) newLMEAgent(
 			MaxTokens:   intPtr(b.cfg.LongMemEval.MaxTokens),
 			Temperature: float64Ptr(0),
 		}),
+		// LongMemEval is a single-branch evaluation; force "all" mode so the
+		// content processor reads summaries persisted under
+		// SummaryFilterKeyAllContents (empty string key) instead of trying to
+		// prefix-match the invocation's auto-derived filter key (the app
+		// name), which would never match an empty-string summary key.
+		llmagent.WithMessageBranchFilterMode(llmagent.BranchFilterModeAll),
 	}
 
 	if mode == lmeModeSummary || mode == lmeModeOnDemand {
@@ -477,7 +486,7 @@ func (b *LongMemEvalBenchmark) newLMEAgent(
 		)
 	}
 
-	return llmagent.New("lme-eval-agent", opts...)
+	return llmagent.New(lmeAgentName, opts...)
 }
 
 func lmeAppName(mode lmeRunMode) string {
@@ -510,12 +519,18 @@ func (b *LongMemEvalBenchmark) seedLongMemEvalSession(
 	for _, sessionTurns := range inst.HaystackSessions {
 		for _, turn := range sessionTurns {
 			role := model.RoleUser
+			author := "user"
 			if turn.Role == "assistant" {
 				role = model.RoleAssistant
+				// Author must equal the consuming agent's name to avoid
+				// being treated as a foreign-agent reply by the content
+				// processor (which would otherwise rewrite all assistant
+				// turns into user-role context messages).
+				author = lmeAgentName
 			}
 			evt := event.New(
 				fmt.Sprintf("%s-%04d", key.SessionID, turnIndex),
-				"lme-seed",
+				author,
 				event.WithResponse(&model.Response{
 					Done: true,
 					Choices: []model.Choice{{
@@ -718,6 +733,12 @@ func aggregateLMEMode(
 		agg.AvgSummaryBuildDurationMs += float64(mr.SummaryBuildDurationMs)
 		agg.AvgQueryLatencyMs += float64(mr.QueryDurationMs)
 		agg.AvgSummaryChars += float64(mr.SummaryChars)
+		if mr.SummaryChars > agg.MaxSummaryChars {
+			agg.MaxSummaryChars = mr.SummaryChars
+		}
+		if mr.TokenUsage.PromptTokens > agg.MaxPromptTokens {
+			agg.MaxPromptTokens = mr.TokenUsage.PromptTokens
+		}
 		agg.AvgSessionSearchCalls += float64(mr.SessionSearchCalls)
 		agg.AvgSessionLoadCalls += float64(mr.SessionLoadCalls)
 		if mr.SummaryAvailable {
@@ -802,6 +823,9 @@ func printLMEAggregate(title string, agg *LMEAggregate) {
 	}
 	fmt.Printf("Avg Tokens (prompt/completion/total): %.0f / %.0f / %.0f\n",
 		agg.AvgPromptTokens, agg.AvgCompletionTokens, agg.AvgTotalTokens)
+	if agg.MaxPromptTokens > 0 {
+		fmt.Printf("Max Prompt Tokens: %d\n", agg.MaxPromptTokens)
+	}
 	fmt.Printf("Avg Latency (total/query): %.0f ms / %.0f ms\n",
 		agg.AvgLatencyMs, agg.AvgQueryLatencyMs)
 	if agg.AvgSeedDurationMs > 0 || agg.AvgSummaryBuildDurationMs > 0 {
@@ -809,8 +833,8 @@ func printLMEAggregate(title string, agg *LMEAggregate) {
 			agg.AvgSeedDurationMs, agg.AvgSummaryBuildDurationMs)
 	}
 	if agg.AvgSummaryChars > 0 || agg.SummaryAvailableRate > 0 {
-		fmt.Printf("Summary Available Rate: %.2f%% | Avg Summary Chars: %.0f\n",
-			100*agg.SummaryAvailableRate, agg.AvgSummaryChars)
+		fmt.Printf("Summary Available Rate: %.2f%% | Avg/Max Summary Chars: %.0f / %d\n",
+			100*agg.SummaryAvailableRate, agg.AvgSummaryChars, agg.MaxSummaryChars)
 	}
 	if agg.AvgSessionSearchCalls > 0 || agg.AvgSessionLoadCalls > 0 {
 		fmt.Printf("Avg Tool Calls (search/load): %.2f / %.2f\n",

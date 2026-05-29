@@ -16,11 +16,12 @@ DATA_DIR="${2:-.}"
 print_usage() {
     cat <<'EOF'
 Usage:
-  ./download_datasets.sh [all|mtbench101|qmsum] [data_dir]
+  ./download_datasets.sh [all|mtbench101|qmsum|longmemeval|lme] [data_dir]
 
 Examples:
   ./download_datasets.sh
   ./download_datasets.sh qmsum
+  ./download_datasets.sh longmemeval
   ./download_datasets.sh mtbench101 ./data
 EOF
 }
@@ -193,4 +194,4 @@ echo "  go run . -dataset ../data/QMSum -dataset-format qmsum -qmsum-domain Comm
 echo
 echo "LongMemEval:"
 echo "  cd summary/trpc-agent-go-impl"
-echo "  PGVECTOR_DSN=\"postgres://...\" go run . -dataset ../data/longmemeval-cleaned/longmemeval_s_cleaned.json -dataset-format longmemeval -num-cases 5 -lme-visible-events 20"
+echo "  PGVECTOR_DSN=\"postgres://...\" go run . -dataset ../data/longmemeval-cleaned/longmemeval_s_cleaned.json -dataset-format longmemeval -lme-question-types single-session-user -num-cases 5 -events 40 -lme-visible-events 20 -detailed-prompt=true"
