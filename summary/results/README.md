@@ -15,7 +15,7 @@ The current report combines three complementary evaluations:
 
 - **MT-Bench-101**: used to study when session summarization is broadly beneficial or harmful
 - **QMSum**: used to study whether `summary_ondemand` can recover details hidden by summary compression on meeting transcripts (~19K tokens)
-- **LongMemEval**: used to study compact summary, on-demand retrieval, and detailed continuity summaries on realistic multi-session user/assistant dialogues at extreme context lengths (~103K tokens)
+- **LongMemEval**: used to study compact summary and on-demand retrieval on realistic multi-session user/assistant dialogues at extreme context lengths (~103K tokens)
 
 ## MT-Bench-101 Evaluation Summary
 
@@ -70,12 +70,12 @@ Evaluates `summary_ondemand` on meeting transcripts where supporting evidence is
 2. Prompt savings remain large at 76.69% versus long context.
 3. The dominant tool path is `session_search → session_load` (1.94 calls/case average).
 
-## LongMemEval Summary Prompt Ablation
+## LongMemEval On-Demand Retrieval Summary
 
-Evaluates summary behavior on realistic multi-session user/assistant dialogues at extreme context lengths. The latest LongMemEval comparison uses the fixed benchmark wiring and compares the default summarizer prompt with the detailed continuity prompt (`-detailed-prompt=true`).
+Evaluates summary behavior on realistic multi-session user/assistant dialogues at extreme context lengths. The current reported LongMemEval run uses compact summaries with on-demand retrieval enabled to test whether focused retrieval can recover facts hidden by summary compression.
 
 **Configuration**:
-- Dataset: `LongMemEval` — `longmemeval_s_cleaned.json / single-session-user`
+- Dataset: `LongMemEval` — `single-session-user`
 - Evaluated Cases: `70`
 - Model: `gpt-4o-mini`
 - Avg Long Context Tokens: ~103K
@@ -85,14 +85,12 @@ Evaluates summary behavior on realistic multi-session user/assistant dialogues a
 
 | Configuration | Mode | ROUGE-L | LLMScore | Exact Match | Avg Prompt Tokens | Prompt Savings |
 |---------------|------|--------:|---------:|------------:|------------------:|---------------:|
-| Full context | `long_context` | 0.1168 | 0.7357 | 0.6571 | 103,565 | — |
-| Default prompt | `summary` | 0.0473 | 0.0771 | 0.0143 | 457 | 99.56% |
-| Default prompt | `summary_ondemand` | 0.2486 | 0.8471 | 0.7286 | 6,308 | 93.90% |
-| Detailed prompt | `summary` | **0.2965** | **0.9179** | **0.8000** | 17,611 | 83.00% |
-| Detailed prompt | `summary_ondemand` | 0.2595 | 0.8900 | 0.7714 | 19,731 | 80.95% |
+| Full context | `long_context` | 0.1192 | 0.7386 | 0.6571 | 103,565 | — |
+| Compact summary | `summary` | 0.0477 | 0.0907 | 0.0143 | 445 | 99.57% |
+| Compact summary + retrieval | `summary_ondemand` | **0.2694** | **0.9000** | **0.7571** | 6,182 | 94.04% |
 
 **Key Insights**:
-1. The default prompt is extremely token-efficient but too lossy for LongMemEval summary-only recall.
-2. Default summary + on-demand retrieval is a strong low-token option: ROUGE-L 0.2486 with 93.90% prompt savings.
-3. The detailed continuity prompt makes summary-only the best-performing mode: ROUGE-L 0.2965, LLMScore 0.9179, and 80% exact match.
-4. With the detailed prompt, on-demand retrieval adds little because the summary already preserves the key user facts.
+1. Compact summary is extremely token-efficient but too lossy for LongMemEval summary-only recall.
+2. Compact summary + on-demand retrieval is a strong low-token option: ROUGE-L 0.2694 with 94.04% prompt savings.
+3. On-demand retrieval exceeds full context on this slice: exact match improves from 0.6571 to 0.7571 while using far fewer prompt tokens.
+4. A small number of overlong events failed embedding due to the 8192-token per-input limit, so the retrieval result is slightly conservative.

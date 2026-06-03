@@ -46,7 +46,10 @@ func summaryOptions(cfg *appConfig) []sessionsummary.Option {
 		),
 	}
 	if cfg.DetailedPrompt {
-		opts = append(opts, sessionsummary.WithDetailedContinuityPrompt())
+		opts = append(opts,
+			sessionsummary.WithPrompt(detailedContinuityPrompt),
+			sessionsummary.WithPostSummaryHook(stripDetailedSummaryOutputHook),
+		)
 	}
 	return opts
 }
@@ -54,10 +57,11 @@ func summaryOptions(cfg *appConfig) []sessionsummary.Option {
 func logDetailedPromptConfig(enabled bool) {
 	if enabled {
 		log.Printf("Detailed Continuity Prompt: true")
-		log.Printf("  - sessionsummary.WithDetailedContinuityPrompt() enabled:")
+		log.Printf("  - sessionsummary.WithPrompt(detailedContinuityPrompt)")
+		log.Printf("  - sessionsummary.WithPostSummaryHook(stripDetailedSummaryOutputHook)")
 		log.Printf("    * nine-section structured summary prompt")
-		log.Printf("    * <analysis> scratchpad stripped from persisted summary")
-		log.Printf("    * verbatim user-message appendix appended to summary")
+		log.Printf("    * <analysis>/<summary> tags stripped by benchmark post hook")
+		log.Printf("    * section 6 instructs the model to list all user messages verbatim")
 		return
 	}
 	log.Printf("Detailed Continuity Prompt: false (using framework default summarizer prompt)")

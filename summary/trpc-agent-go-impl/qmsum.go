@@ -1080,7 +1080,11 @@ func newQMSumEmbeddingEmbedder(modelName string) *embedopenai.Embedder {
 	opts := []embedopenai.Option{
 		embedopenai.WithModel(modelName),
 	}
-	if apiKey := os.Getenv("OPENAI_EMBEDDING_API_KEY"); apiKey != "" {
+	apiKey := os.Getenv("OPENAI_EMBEDDING_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("EMBEDDING_API_KEY")
+	}
+	if apiKey != "" {
 		opts = append(opts, embedopenai.WithAPIKey(apiKey))
 	}
 	baseURL := os.Getenv("OPENAI_EMBEDDING_BASE_URL")
