@@ -15,7 +15,7 @@ The current report combines three complementary evaluations:
 
 - **MT-Bench-101**: used to study when session summarization is broadly beneficial or harmful
 - **QMSum**: used to study whether `summary_ondemand` can recover details hidden by summary compression on meeting transcripts (~19K tokens)
-- **LongMemEval**: used to study compact summary and on-demand retrieval on realistic multi-session user/assistant dialogues at extreme context lengths (~103K tokens)
+- **LongMemEval**: used to study compact summary and on-demand retrieval on realistic multi-session user/assistant dialogues at extreme context lengths (~103K tokens), including a structured result summary prompt comparison
 
 ## MT-Bench-101 Evaluation Summary
 
@@ -72,7 +72,7 @@ Evaluates `summary_ondemand` on meeting transcripts where supporting evidence is
 
 ## LongMemEval On-Demand Retrieval Summary
 
-Evaluates summary behavior on realistic multi-session user/assistant dialogues at extreme context lengths. The current reported LongMemEval run uses compact summaries with on-demand retrieval enabled to test whether focused retrieval can recover facts hidden by summary compression.
+Evaluates summary behavior on realistic multi-session user/assistant dialogues at extreme context lengths. The current reported LongMemEval run uses compact summaries with on-demand retrieval enabled to test whether focused retrieval can recover facts hidden by summary compression. It also compares a structured result summary prompt: a nine-section summary format that asks the model to preserve user messages verbatim.
 
 **Configuration**:
 - Dataset: `LongMemEval` — `single-session-user`
@@ -80,6 +80,7 @@ Evaluates summary behavior on realistic multi-session user/assistant dialogues a
 - Model: `gpt-4o-mini`
 - Avg Long Context Tokens: ~103K
 - Summary Trigger: `-events 40`, visible tail: `-lme-visible-events 20`
+- Prompt Variants: compact summary; structured result summary
 
 **Key Results**:
 
@@ -89,8 +90,16 @@ Evaluates summary behavior on realistic multi-session user/assistant dialogues a
 | Compact summary | `summary` | 0.0477 | 0.0907 | 0.0143 | 445 | 99.57% |
 | Compact summary + retrieval | `summary_ondemand` | **0.2694** | **0.9000** | **0.7571** | 6,182 | 94.04% |
 
+**Prompt Variant Check**:
+
+| Summary Prompt | Mode | ROUGE-L | LLMScore | Exact Match | Avg Summary Chars |
+|----------------|------|--------:|---------:|------------:|------------------:|
+| Compact summary | `summary_ondemand` | **0.2694** | **0.9000** | 0.7571 | 1,745 |
+| Structured result summary | `summary_ondemand` | 0.2528 | 0.8879 | 0.7571 | 2,150 |
+
 **Key Insights**:
 1. Compact summary is extremely token-efficient but too lossy for LongMemEval summary-only recall.
 2. Compact summary + on-demand retrieval is a strong low-token option: ROUGE-L 0.2694 with 94.04% prompt savings.
 3. On-demand retrieval exceeds full context on this slice: exact match improves from 0.6571 to 0.7571 while using far fewer prompt tokens.
-4. A small number of overlong events failed embedding due to the 8192-token per-input limit, so the retrieval result is slightly conservative.
+4. Structured result summary is longer but does not improve LongMemEval headline metrics, so compact summary remains the better default for this workload.
+5. A small number of overlong events failed embedding due to the 8192-token per-input limit, so the retrieval result is slightly conservative.

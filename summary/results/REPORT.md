@@ -16,11 +16,12 @@ On a broader QMSum hidden-detail workload (`test / ALL / specific / support_dist
 - **On-Demand Retrieval Recovers a Meaningful Portion of the Loss**: `summary_ondemand` improves ROUGE-L to 0.1770, recovering 61.5% of the ROUGE-L loss and 59.9% of the F1 loss caused by summary compression
 - **Recovery Still Preserves Large Savings**: `summary_ondemand` keeps a 76.69% prompt-token reduction versus long context
 
-On LongMemEval (`longmemeval_s_cleaned / single-session-user`), we additionally find:
+On the LongMemEval `single-session-user` slice, we additionally find:
 
 - **Compact Summary Alone Is Too Lossy**: plain `summary` reduces average prompt tokens from 103,565 to 445, saving 99.57%, but reaches only 0.0143 exact match
 - **On-Demand Retrieval Recovers Long-Term Memory Quality**: `summary_ondemand` raises ROUGE-L from 0.0477 to 0.2694 and exact match from 0.0143 to 0.7571
 - **Recovery Still Preserves Large Savings**: `summary_ondemand` keeps 94.04% prompt-token savings versus full context while also exceeding full context's 0.6571 exact match
+- **A Structured Result Summary Prompt Does Not Add Benefit**: on the same 70 cases, a nine-section prompt that also asks the model to preserve user messages verbatim reaches 0.2528 ROUGE-L and 0.8879 LLMScore in `summary_ondemand`, slightly below compact summary + retrieval at 0.2694 / 0.9000
 
 Overall, the MT-Bench-101 results tell us when summary is broadly worth enabling, the QMSum results tell us what happens after summary hides details and whether an on-demand retrieval path can recover them, and the LongMemEval results show that at extreme context lengths, compact summary plus focused retrieval can outperform raw full context while preserving large prompt savings.
 
@@ -144,6 +145,7 @@ The key difference from QMSum is twofold: LongMemEval uses real user/assistant r
 | Question types            | single-session-user                           |
 | Modes                     | `long_context`, `summary`, `summary_ondemand` |
 | Retrieval tools           | `session_search`, `session_load`              |
+| Prompt variants           | Compact summary as the main result; structured result summary as an additional comparison |
 
 ---
 
@@ -255,7 +257,7 @@ The main takeaway is that summary compression creates a real quality gap, but on
 
 ### 3.6 On-Demand Retrieval on Multi-Session Dialogues (LongMemEval)
 
-The QMSum results establish that on-demand retrieval recovers hidden details at medium context lengths (~19K tokens). LongMemEval extends this evaluation to realistic user/assistant conversations where total context averages ~103K tokens — near the boundary of the model's 128K context window. This section reports one 70-case `single-session-user` run using the default compact summary and enabling `session_search` / `session_load` in `summary_ondemand`.
+The QMSum results establish that on-demand retrieval recovers hidden details at medium context lengths (~19K tokens). LongMemEval extends this evaluation to realistic user/assistant conversations where total context averages ~103K tokens — near the boundary of the model's 128K context window. This section reports one 70-case `single-session-user` run using the default compact summary and enabling `session_search` / `session_load` in `summary_ondemand`. It then compares the same setup against a structured result summary prompt: a nine-section prompt that asks the summarizer to preserve user messages verbatim in a dedicated section.
 
 **Table 6: LongMemEval Aggregate Results (single-session-user, 70 cases)**
 
@@ -265,15 +267,27 @@ The QMSum results establish that on-demand retrieval recovers hidden details at 
 | `summary` | 0.0477 | 0.0549 | 0.0421 | 0.0907 | 0.0143 | 445 | 99.57% | 1,698 | 2,756 ms |
 | `summary_ondemand` | **0.2694** | **0.2771** | **0.1804** | **0.9000** | **0.7571** | 6,182 | 94.04% | 1,745 | 7,646 ms |
 
+To test whether a more structured and more complete summary prompt improves recall, we also ran the same 70 cases with the structured result summary variant.
+
+**Table 7: LongMemEval Prompt Variant Comparison (single-session-user, 70 cases)**
+
+| Summary Prompt | Mode | ROUGE-L | LLMScore | Exact Match | Avg Prompt Tokens | Avg Summary Chars | Avg Query Latency |
+| -------------- | ---- | ------: | -------: | ----------: | ----------------: | ----------------: | ----------------: |
+| Compact summary | `summary` | 0.0477 | 0.0907 | 0.0143 | 445 | 1,698 | 2,756 ms |
+| Compact summary | `summary_ondemand` | **0.2694** | **0.9000** | 0.7571 | 6,182 | 1,745 | 7,646 ms |
+| Structured result summary (nine sections + verbatim user messages) | `summary` | 0.0363 | 0.0643 | 0.0000 | 581 | 2,348 | 3,690 ms |
+| Structured result summary (nine sections + verbatim user messages) | `summary_ondemand` | 0.2528 | 0.8879 | 0.7571 | 5,735 | 2,150 | 8,385 ms |
+
 Key observations:
 
 - Compact `summary` is extremely cheap (445 prompt tokens on average) but too lossy for direct long-term memory recall.
 - `summary_ondemand` recovers and surpasses full context: ROUGE-L rises from `0.0477` to `0.2694`, and exact match rises from `0.0143` to `0.7571`.
 - The recovery still preserves large savings: `summary_ondemand` keeps `94.04%` prompt-token savings versus full context.
 - Per-case ROUGE-L comparison gives `63` wins, `3` losses, and `4` ties for `summary_ondemand` against plain `summary`.
+- The structured result summary is longer (2,348 average chars versus 1,698), but neither its plain `summary` nor its `summary_ondemand` result beats compact summary. Preserving more user-message text in the summary does not automatically improve answer recall.
 - A small number of embedding writes fail because individual events exceed the embedding model's 8192-token input limit. This makes the results slightly conservative but does not invalidate the aggregate run.
 
-The main takeaway is that raw long context is not automatically best at ~103K tokens. Compact summary alone loses facts, but compact summary plus on-demand retrieval substantially outperforms full context while keeping roughly 94% prompt savings.
+The main takeaway is that raw long context is not automatically best at ~103K tokens. Compact summary alone loses facts, but compact summary plus on-demand retrieval substantially outperforms full context while keeping roughly 94% prompt savings. The structured result summary prompt does not improve the headline metrics, so it is better understood as a handoff/debugging format than as the default summary strategy.
 
 ### 3.7 Tool Trace Analysis
 
@@ -331,7 +345,7 @@ One caveat: 4 of 189 cases had `session_load` failures (`anchor event not found`
 
 #### 3.7.2 LongMemEval Retrieval Patterns
 
-LongMemEval events are coarser than QMSum turns: a search hit is usually a full user or assistant message. In 70 cases, 69 call `session_search`, while 15 also call `session_load`. The model therefore relies primarily on search to recover hidden facts and only occasionally needs a wider local window.
+LongMemEval events are coarser than QMSum turns: a search hit is usually a full user or assistant message. With compact summary, 69 of 70 cases call `session_search`, while 15 also call `session_load`. The model therefore relies primarily on search to recover hidden facts and only occasionally needs a wider local window. The structured result summary variant shows a similar tool-use shape: 69 cases call `session_search`, 13 call `session_load`, and average search/load calls are 1.09 / 0.19.
 
 | Metric | LongMemEval |
 | ------ | ----------: |
@@ -457,7 +471,7 @@ On QMSum (~19K tokens), plain summary sharply reduces prompt cost but creates a 
 - F1 improves from `0.2238` to `0.2774`
 - the recovered share is about `61.5%` of the ROUGE-L loss and `59.9%` of the F1 loss caused by summary compression
 
-On LongMemEval (~103K tokens), compact summary is very cheap but too lossy, and on-demand retrieval is the main quality mechanism: ROUGE-L improves from `0.0477` to `0.2694`, exceeding both plain summary and full context (`0.1192`).
+On LongMemEval (~103K tokens), compact summary is very cheap but too lossy, and on-demand retrieval is the main quality mechanism: ROUGE-L improves from `0.0477` to `0.2694`, exceeding both plain summary and full context (`0.1192`). The structured result summary variant increases average summary length to `2,348` characters, but its `summary_ondemand` result reaches 0.2528 ROUGE-L and 0.8879 LLMScore, below compact summary + retrieval.
 
 Together, QMSum and LongMemEval show that on-demand retrieval recovers details hidden by summary compression across different context scales. At ~19K tokens it narrows the quality gap to long context; at ~103K tokens it can exceed long context by focusing the model on the relevant evidence.
 
@@ -472,6 +486,8 @@ The LongMemEval results present an apparent paradox: providing the model with mo
 3. **Coarse-grained event hits**: LongMemEval events are full user/assistant messages, so a search hit often contains the answer directly. This makes retrieval especially effective and keeps `session_load` usage low.
 
 This pattern is expected to strengthen as conversation history grows longer. As context exceeds the model's effective processing range, raw long-context recall degrades and targeted retrieval becomes increasingly valuable.
+
+The summary itself should remain usable rather than trying to fully replay the conversation. The structured result summary prompt preserves more handoff text and user wording, but the LongMemEval comparison does not show a quality gain. For long-term memory QA, summary acts more like a compact state and routing layer; factual recovery should primarily come from retrieval.
 
 ### 4.3 Experimental Limitations
 
@@ -526,6 +542,7 @@ For hidden-detail workloads where summary is already enabled and the question de
 
 - **Default Summary + On-Demand Retrieval Recommended**: when the summary must stay compact, keep summary for compression and expose retrieval tools as the path for surfacing hidden context
 - **For conversations exceeding ~50K tokens, avoid relying on raw full context alone**: use targeted retrieval to focus the model on relevant evidence, because full-context recall degrades at extreme lengths
+- **Do not default to handoff-style exhaustive summaries**: the structured result summary prompt does not improve LongMemEval headline metrics; keep summaries compact and let on-demand retrieval recover facts
 - **Control indexing input length**: truncate, chunk, or pre-summarize overlong events before embedding so that key evidence is not lost at indexing time
 
 ### 5.2 Next Optimization Directions
@@ -552,6 +569,8 @@ Across MT-Bench-101, QMSum, and LongMemEval, this report evaluates session summa
 5. **On-Demand Retrieval Helps with Summary-Hidden Detail Recovery**: On the broader QMSum hidden-detail workload, `summary_ondemand` improves ROUGE-L from 0.1516 to 0.1770 over plain `summary`, wins 123 of 189 cases, and recovers a meaningful portion of the quality gap to `long_context` while still saving 76.69% of prompt tokens.
 
 6. **Long-Term Memory Needs Focused Retrieval**: On LongMemEval's ~103K-token dialogues, compact summary alone is weak (ROUGE-L 0.0477), but adding on-demand retrieval reaches ROUGE-L 0.2694, LLMScore 0.9000, and exact match 0.7571. This exceeds raw long context while preserving 94.04% prompt savings.
+
+7. **Structured Result Summaries Should Not Be the Default Optimization Path**: On the same 70 LongMemEval cases, the nine-section prompt with verbatim user-message preservation reaches 0.2528 ROUGE-L, 0.8879 LLMScore, and 0.7571 exact match in `summary_ondemand`, below compact summary + retrieval.
 
 ---
 
@@ -663,7 +682,7 @@ The tables below are extracted from the raw QMSum benchmark output.
 
 ### Appendix E: Raw LongMemEval Aggregate Output
 
-The tables below summarize this LongMemEval benchmark run.
+The tables below summarize this LongMemEval benchmark run and the same-configuration structured result summary comparison.
 
 **Source metadata**
 
@@ -681,6 +700,15 @@ The tables below summarize this LongMemEval benchmark run.
 | `summary` | 0.0477 | 0.0549 | 0.0421 | 0.0907 | 0.0143 | 445 | 2,756 |
 | `summary_ondemand` | 0.2694 | 0.2771 | 0.1804 | 0.9000 | 0.7571 | 6,182 | 7,646 |
 
+**Prompt variant comparison**
+
+| Summary Prompt | Mode | avg_rouge_l | avg_f1 | avg_bleu | avg_llm_score | avg_exact_match | avg_prompt_tokens | avg_summary_chars | avg_query_latency_ms |
+| -------------- | ---- | ----------: | -----: | -------: | ------------: | --------------: | ----------------: | ----------------: | -------------------: |
+| Compact summary | `summary` | 0.0477 | 0.0549 | 0.0421 | 0.0907 | 0.0143 | 445 | 1,698 | 2,756 |
+| Compact summary | `summary_ondemand` | 0.2694 | 0.2771 | 0.1804 | 0.9000 | 0.7571 | 6,182 | 1,745 | 7,646 |
+| Structured result summary (nine sections + verbatim user messages) | `summary` | 0.0363 | 0.0457 | 0.0348 | 0.0643 | 0.0000 | 581 | 2,348 | 3,690 |
+| Structured result summary (nine sections + verbatim user messages) | `summary_ondemand` | 0.2528 | 0.2602 | 0.1663 | 0.8879 | 0.7571 | 5,735 | 2,150 | 8,385 |
+
 **Derived comparisons**
 
 | Derived metric | Value |
@@ -694,6 +722,10 @@ The tables below summarize this LongMemEval benchmark run.
 | cases_with_search | 69 |
 | cases_with_load | 15 |
 | wins/losses/ties_vs_summary_by_rouge_l | 63 / 3 / 4 |
+| structured_prompt_ondemand_rouge_l | 0.2528 |
+| structured_prompt_ondemand_llm_score | 0.8879 |
+| structured_prompt_ondemand_exact_match | 0.7571 |
+| structured_prompt_wins/losses/ties_vs_summary_by_rouge_l | 62 / 4 / 4 |
 
 ---
 
