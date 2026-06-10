@@ -96,36 +96,54 @@ pip install openai-whisper
 cd gaia/trpc-agent-go-impl
 
 # Run Level 1 validation set (all tasks)
-go run main.go
+go run ./cmd/baseline
 
 # Run a specific number of tasks
-go run main.go -tasks 10
+go run ./cmd/baseline -tasks 10
 
 # Run a specific task (by index)
-go run main.go -task-id 28
+go run ./cmd/baseline -task-id 28
 
 # Run a specific task (by task_id)
-go run main.go -task-id "e1fc63a2-da7a-432f-be78-7c4a95598703"
+go run ./cmd/baseline -task-id "e1fc63a2-da7a-432f-be78-7c4a95598703"
 
 # Specify model
-go run main.go -model gpt-4o
+go run ./cmd/baseline -model gpt-4o
 
 # Enable Ralph Loop (outer loop verification)
-go run main.go -ralph-loop
+go run ./cmd/ralph -max-iterations 3
+
+# Enable LLM verifier best-of-N selection
+go run ./cmd/llmverifier -model gpt-5 -attempts 5
 ```
 
 ### Command Line Arguments
+
+Shared arguments:
 
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `-dataset` | `../data/gaia_2023_level1_validation.json` | Path to GAIA dataset |
 | `-data-dir` | `../data` | Directory containing data files (attachments) |
-| `-output` | `../results/trpc-agent-go.json` | Path for output results |
+| `-output` | command-specific | Path for output results |
 | `-tasks` | `0` | Number of tasks to run (0 means all) |
 | `-model` | `deepseek-v3-local-II` | Model name to use |
 | `-task-id` | `""` | Run specific task (by index or task_id) |
-| `-ralph-loop` | `false` | Enable Ralph Loop outer loop verification |
-| `-ralph-max-iterations` | `3` | Max Ralph Loop iterations (only when `-ralph-loop` is enabled) |
+
+Ralph Loop arguments:
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `-max-iterations` | `3` | Max Ralph Loop iterations |
+
+LLM verifier arguments:
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `-attempts` | `3` | Number of candidate attempts |
+| `-judge-model` | `gpt-5` | Judge model name |
+| `-judge-samples` | `1` | Number of judge samples per candidate comparison |
+| `-judge-max-tokens` | `32768` | Judge max output tokens |
 
 ### Dataset Description
 
@@ -158,21 +176,28 @@ Evaluation results are saved in JSON format:
 
 This benchmark can be run in two modes:
 
-- **Baseline**: default `react` planner (`-ralph-loop=false`)
+- **Baseline**: default `react` planner (`go run ./cmd/baseline`)
 - **Ralph Loop (runner-level outer loop)**: wraps the agent with
-  `runner.WithRalphLoop(...)` (`-ralph-loop=true`)
+  `runner.WithRalphLoop(...)` (`go run ./cmd/ralph`)
 
 When Ralph Loop is enabled, the runner will keep re-running the agent until a
-completion condition is met (or `-ralph-max-iterations` is reached). In this
+completion condition is met (or `-max-iterations` is reached). In this
 GAIA implementation, the completion condition is a simple verifier: the last
 assistant message must contain a `FINAL ANSWER: <answer>` line.
 
-Results (GAIA Level 1 validation, 53 tasks, run date: 2026-01-30):
+The LLM verifier runner is available as a separate command:
+`go run ./cmd/llmverifier`. It runs multiple candidate attempts for each GAIA
+task and uses a judge model with a GAIA-specific pairwise rubric to select the
+winner. Candidate attempts run in parallel by default, with attempt parallelism
+set to the configured `-attempts` value.
+
+Results (GAIA Level 1 validation, 53 tasks, run date: 2026-06-10):
 
 | Run | Mode | Correct | Accuracy | Avg steps | Avg time | Avg tokens | Avg tool calls |
 |-----|------|--------:|---------:|----------:|---------:|-----------:|---------------:|
 | A | react | 41/53 | 77.36% | 7.26 | 201.2s | 22,588 | 6.15 |
 | B | react + ralph-loop (runner) | 39/53 | 73.58% | 7.85 | 207.5s | 20,516 | 6.83 |
+| C | react + llm-verifier best-of-N (`-attempts 5`) | 42/53 | 79.25% | 4.96 | 243.3s | 16,592 | 3.98 |
 
 Notes:
 
@@ -181,12 +206,15 @@ Notes:
 - If you exclude those 2 error tasks and compare only the remaining 51 tasks,
   both runs are **39/51 (76.47%)**. In this setup, enabling Ralph Loop did not
   show a clear accuracy improvement, and slightly increased steps / tool calls.
+- Run C used `gpt-5` for candidate attempts and LLM verifier best-of-N selection
+  with `-attempts 5`.
 
 Raw outputs are stored in `gaia/results/` (kept out of git by
 default):
 
 - `gpt-5_react_baseline.json`
 - `gpt-5_react_ralph_runner.json`
+- `gpt-5_react_llmverifier.json`
 
 ## Agent Capabilities
 

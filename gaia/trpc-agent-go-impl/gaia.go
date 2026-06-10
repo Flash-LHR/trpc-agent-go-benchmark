@@ -7,7 +7,7 @@
 //
 //
 
-package main
+package gaiaeval
 
 import (
 	"archive/zip"
@@ -16,7 +16,6 @@ import (
 	"crypto/tls"
 	"encoding/csv"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -48,24 +47,68 @@ import (
 	"trpc.group/trpc-go/trpc-agent-go/tool/wikipedia"
 )
 
-var (
-	datasetPath     = flag.String("dataset", "../data/gaia_2023_level1_validation.json", "Path to GAIA dataset")
-	dataDir         = flag.String("data-dir", "../data", "Directory containing data files")
-	outputPath      = flag.String("output", "../results/trpc-agent-go.json", "Path to output results")
-	maxTasks        = flag.Int("tasks", 0, "Maximum number of tasks to run (0 means all)")
-	modelName       = flag.String("model", "deepseek-v3-local-II", "Model name to use")
-	specificTask    = flag.String("task-id", "", "Run specific task by task ID or index (e.g., '28' or 'e1fc63a2-da7a-432f-be78-7c4a95598703')")
-	enableRalphLoop = flag.Bool(
-		"ralph-loop",
-		false,
-		"Enable Ralph Loop outer loop verification",
-	)
-	ralphMaxIterations = flag.Int(
-		"ralph-max-iterations",
-		3,
-		"Max Ralph Loop iterations",
-	)
+const (
+	defaultDatasetPath = "../data/gaia_2023_level1_validation.json"
+	defaultDataDir     = "../data"
+	defaultOutputPath  = "../results/trpc-agent-go.json"
+	defaultModelName   = "deepseek-v3-local-II"
+	defaultFramework   = "trpc-agent-go"
 )
+
+// RunnerFactory creates the runner variant used by a benchmark command.
+type RunnerFactory func(agent.Agent) (runner.Runner, error)
+
+// Config contains shared GAIA benchmark settings.
+type Config struct {
+	DatasetPath   string
+	DataDir       string
+	OutputPath    string
+	ModelName     string
+	TaskID        string
+	ModeName      string
+	Framework     string
+	MaxTasks      int
+	RunnerFactory RunnerFactory
+}
+
+// DefaultConfig returns the shared defaults for GAIA commands.
+func DefaultConfig() Config {
+	return Config{
+		DatasetPath: defaultDatasetPath,
+		DataDir:     defaultDataDir,
+		OutputPath:  defaultOutputPath,
+		ModelName:   defaultModelName,
+		Framework:   defaultFramework,
+	}
+}
+
+func (cfg Config) withDefaults() Config {
+	defaults := DefaultConfig()
+	if cfg.DatasetPath == "" {
+		cfg.DatasetPath = defaults.DatasetPath
+	}
+	if cfg.DataDir == "" {
+		cfg.DataDir = defaults.DataDir
+	}
+	if cfg.OutputPath == "" {
+		cfg.OutputPath = defaults.OutputPath
+	}
+	if cfg.ModelName == "" {
+		cfg.ModelName = defaults.ModelName
+	}
+	if cfg.Framework == "" {
+		cfg.Framework = defaults.Framework
+	}
+	if cfg.ModeName == "" {
+		cfg.ModeName = "react"
+	}
+	if cfg.RunnerFactory == nil {
+		cfg.RunnerFactory = func(ag agent.Agent) (runner.Runner, error) {
+			return NewBaselineRunner(ag), nil
+		}
+	}
+	return cfg
+}
 
 // Store original working directory for relative path resolution
 var originalDir string
@@ -221,55 +264,57 @@ CRITICAL OUTPUT FORMAT:
 When you have found the answer, always end with:
 FINAL ANSWER: <your concise answer here>`
 
-func main() {
-	flag.Parse()
-
-	log.Printf("Starting GAIA Benchmark evaluation for trpc-agent-go")
-	log.Printf("Dataset: %s", *datasetPath)
-	log.Printf("Data directory: %s", *dataDir)
-	log.Printf("Max tasks: %d", *maxTasks)
-	log.Printf("Model: %s", *modelName)
-	if *enableRalphLoop {
-		log.Printf("Planner: react (Ralph Loop enabled)")
-		log.Printf("Ralph Loop max iterations: %d", *ralphMaxIterations)
-	} else {
-		log.Printf("Planner: react")
+// Run executes a GAIA benchmark with the supplied runner variant.
+func Run(ctx context.Context, cfg Config) error {
+	if ctx == nil {
+		ctx = context.Background()
 	}
+	cfg = cfg.withDefaults()
+	log.Printf("Starting GAIA Benchmark evaluation for trpc-agent-go")
+	log.Printf("Dataset: %s", cfg.DatasetPath)
+	log.Printf("Data directory: %s", cfg.DataDir)
+	log.Printf("Max tasks: %d", cfg.MaxTasks)
+	log.Printf("Model: %s", cfg.ModelName)
+	log.Printf("Mode: %s", cfg.ModeName)
 
 	// Load dataset
-	tasks, err := loadDataset(*datasetPath)
+	tasks, err := loadDataset(cfg.DatasetPath)
 	if err != nil {
-		log.Fatalf("Failed to load dataset: %v", err)
+		return fmt.Errorf("load dataset: %w", err)
 	}
 
 	// Filter by specific task if specified
-	if *specificTask != "" {
-		tasks = filterTasksByID(tasks, *specificTask)
+	if cfg.TaskID != "" {
+		tasks = filterTasksByID(tasks, cfg.TaskID)
 		if len(tasks) == 0 {
-			log.Fatalf("No task found matching: %s", *specificTask)
+			return fmt.Errorf("no task found matching: %s", cfg.TaskID)
 		}
-		log.Printf("Running specific task: %s", *specificTask)
-	} else if *maxTasks > 0 && len(tasks) > *maxTasks {
-		tasks = tasks[:*maxTasks]
+		log.Printf("Running specific task: %s", cfg.TaskID)
+	} else if cfg.MaxTasks > 0 && len(tasks) > cfg.MaxTasks {
+		tasks = tasks[:cfg.MaxTasks]
 	}
 
 	log.Printf("Loaded %d tasks", len(tasks))
 
 	// Create agent and runner
-	gaiaAgent := createGAIAAgent()
-	gaiaRunner := createGAIARunner(gaiaAgent)
+	gaiaAgent := CreateGAIAAgent(cfg)
+	gaiaRunner, err := cfg.RunnerFactory(gaiaAgent)
+	if err != nil {
+		return fmt.Errorf("create runner: %w", err)
+	}
 	defer gaiaRunner.Close()
 
 	// Run benchmark
-	results := runBenchmark(gaiaRunner, tasks)
+	results := runBenchmark(ctx, gaiaRunner, tasks, cfg)
 
 	// Save results
-	if err := saveResults(results, *outputPath); err != nil {
-		log.Fatalf("Failed to save results: %v", err)
+	if err := saveResults(results, cfg.OutputPath); err != nil {
+		return fmt.Errorf("save results: %w", err)
 	}
 
 	// Print summary
 	printSummary(results)
+	return nil
 }
 
 func loadDataset(path string) ([]GAIATask, error) {
@@ -1399,15 +1444,25 @@ func assistantContentFromEvent(lastEvent *event.Event) string {
 	return b.String()
 }
 
-func createGAIARunner(ag agent.Agent) runner.Runner {
-	if !*enableRalphLoop {
-		return runner.NewRunner("gaia-runner", ag)
+// NewBaselineRunner creates the plain GAIA benchmark runner.
+func NewBaselineRunner(ag agent.Agent) runner.Runner {
+	return runner.NewRunner("gaia-runner", ag)
+}
+
+// BaselineRunnerFactory returns the plain GAIA benchmark runner factory.
+func BaselineRunnerFactory() RunnerFactory {
+	return func(ag agent.Agent) (runner.Runner, error) {
+		return NewBaselineRunner(ag), nil
 	}
+}
+
+// NewRalphRunner creates the GAIA runner with Ralph Loop enabled.
+func NewRalphRunner(ag agent.Agent, maxIterations int) runner.Runner {
 	return runner.NewRunner(
 		"gaia-runner",
 		ag,
 		runner.WithRalphLoop(runner.RalphLoopConfig{
-			MaxIterations: *ralphMaxIterations,
+			MaxIterations: maxIterations,
 			Verifiers: []runner.Verifier{
 				gaiaFinalAnswerVerifier{},
 			},
@@ -1415,9 +1470,18 @@ func createGAIARunner(ag agent.Agent) runner.Runner {
 	)
 }
 
-func createGAIAAgent() agent.Agent {
+// RalphRunnerFactory returns a runner factory with Ralph Loop enabled.
+func RalphRunnerFactory(maxIterations int) RunnerFactory {
+	return func(ag agent.Agent) (runner.Runner, error) {
+		return NewRalphRunner(ag, maxIterations), nil
+	}
+}
+
+// CreateGAIAAgent creates the ReAct agent used by all GAIA benchmark variants.
+func CreateGAIAAgent(cfg Config) agent.Agent {
+	cfg = cfg.withDefaults()
 	// Create model
-	modelInstance := openai.New(*modelName)
+	modelInstance := openai.New(cfg.ModelName)
 
 	// 创建 DuckDuckGo HTML 搜索工具（真正的网页搜索，不是 Instant Answer API）
 	ddgSearchTool := function.NewFunctionTool(
@@ -1439,7 +1503,7 @@ func createGAIAAgent() agent.Agent {
 	}
 
 	// Get absolute path for data directory
-	absDataDir, err := filepath.Abs(*dataDir)
+	absDataDir, err := filepath.Abs(cfg.DataDir)
 	if err != nil {
 		log.Fatalf("Failed to get absolute path for data dir: %v", err)
 	}
@@ -1503,7 +1567,7 @@ IMPORTANT:
 	// Note: GPT-5 is a reasoning model whose internal reasoning consumes many tokens
 	// Requires larger MaxTokens to ensure enough space for final answer output
 	generationConfig := model.GenerationConfig{}
-	if strings.Contains(*modelName, "gpt-5") {
+	if strings.Contains(cfg.ModelName, "gpt-5") {
 		// GPT-5 reasoning model needs larger token limit
 		// Reasoning may consume 16K+, so total needs 32K or more
 		generationConfig.MaxTokens = intPtr(32768)
@@ -1550,14 +1614,14 @@ IMPORTANT:
 	return llmagent.New("gaia-agent", agentOpts...)
 }
 
-func runBenchmark(r runner.Runner, tasks []GAIATask) SummaryResult {
+func runBenchmark(ctx context.Context, r runner.Runner, tasks []GAIATask, cfg Config) SummaryResult {
 	results := make([]BenchmarkResult, 0, len(tasks))
 
 	for i, task := range tasks {
 		log.Printf("[%d/%d] Processing task: %s", i+1, len(tasks), task.TaskID)
 
 		startTime := time.Now()
-		result := runSingleTask(r, task)
+		result := runSingleTask(ctx, r, task, cfg)
 		result.ExecutionTime = time.Since(startTime)
 
 		results = append(results, result)
@@ -1569,12 +1633,10 @@ func runBenchmark(r runner.Runner, tasks []GAIATask) SummaryResult {
 		}
 	}
 
-	return calculateSummary("trpc-agent-go", results)
+	return calculateSummary(cfg.Framework, results)
 }
 
-func runSingleTask(r runner.Runner, task GAIATask) BenchmarkResult {
-	ctx := context.Background()
-
+func runSingleTask(ctx context.Context, r runner.Runner, task GAIATask, cfg Config) BenchmarkResult {
 	result := BenchmarkResult{
 		TaskID:      task.TaskID,
 		Question:    task.Question,
@@ -1596,7 +1658,7 @@ func runSingleTask(r runner.Runner, task GAIATask) BenchmarkResult {
 	// Handle attached files based on file type
 	var hasImageAttachment bool
 	if task.FilePath != "" {
-		absDataDir, err := filepath.Abs(*dataDir)
+		absDataDir, err := filepath.Abs(cfg.DataDir)
 		if err == nil {
 			filePath := filepath.Join(absDataDir, task.FilePath)
 			if _, err := os.Stat(filePath); err == nil {
@@ -1821,6 +1883,7 @@ func extractFinalAnswer(content string) string {
 	// Try matching "FINAL ANSWER:" format
 	patterns := []string{
 		`(?i)FINAL\s*ANSWER\s*:\s*(.+?)(?:\n|$)`,
+		`(?i)FINAL_ANSWER\s*:\s*(.+?)(?:\n|$)`,
 		`(?i)The\s+answer\s+is\s*:\s*(.+?)(?:\n|$)`,
 		`(?i)Answer\s*:\s*(.+?)(?:\n|$)`,
 	}
@@ -1837,6 +1900,10 @@ func extractFinalAnswer(content string) string {
 			answer = formatAnswer(answer)
 			return answer
 		}
+	}
+
+	if answer := extractBlockFinalAnswer(content); answer != "" {
+		return answer
 	}
 
 	// Fallback: Enhanced error tolerance - detect and skip malformed output
@@ -1892,6 +1959,20 @@ func extractFinalAnswer(content string) string {
 	return ""
 }
 
+func extractBlockFinalAnswer(content string) string {
+	patterns := []string{
+		`(?is)/\*\s*FINAL[_\s]*ANSWER\s*\*/\s*(?:FINAL\s*ANSWER\s*:\s*)?(.+?)(?:\n\s*/\*|$)`,
+	}
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		matches := re.FindStringSubmatch(content)
+		if len(matches) > 1 {
+			return formatAnswer(strings.Trim(matches[1], `"'`))
+		}
+	}
+	return ""
+}
+
 // extractAnswerFromReasoning extracts answer from reasoning content
 // This is a fallback function used when model output format is malformed
 func extractAnswerFromReasoning(reasoning string) string {
@@ -1937,7 +2018,6 @@ func extractAnswerFromReasoning(reasoning string) string {
 	conclusionPatterns := []string{
 		`(?i)so\s+(?:the\s+)?(?:answer|count|total|number)\s+is\s+(\d+)`,
 		`(?i)(?:gives|leaves|results?\s+in)\s+(?:us\s+)?(\d+)`,
-		`(?i)(?:=|equals?)\s*(\d+)`,
 	}
 
 	for _, pattern := range conclusionPatterns {
@@ -1958,15 +2038,9 @@ func formatAnswer(answer string) string {
 		answer = strings.ReplaceAll(answer, symbol, "")
 	}
 
-	// 2. Remove thousand separators (commas in numbers)
-	// Use regex to only remove commas in numbers, e.g.: 89,706 -> 89706
-	commaPattern := regexp.MustCompile(`(\d),(\d)`)
-	for commaPattern.MatchString(answer) {
-		answer = commaPattern.ReplaceAllString(answer, "${1}${2}")
-	}
+	answer = normalizeNumericCommaUsage(answer)
 
-	// 3. Normalize list separators: ensure space after comma (for letters/words only)
-	// a,b,c,d -> a, b,c,d -> a, b, c,d -> a, b, c, d
+	// 3. Normalize list separators for words.
 	listPattern := regexp.MustCompile(`([a-zA-Z]),([a-zA-Z])`)
 	for {
 		newAnswer := listPattern.ReplaceAllString(answer, "${1}, ${2}")
@@ -1993,6 +2067,49 @@ func formatAnswer(answer string) string {
 	return strings.TrimSpace(answer)
 }
 
+func normalizeNumericCommaUsage(answer string) string {
+	numericCommaToken := regexp.MustCompile(`[+-]?\d+(?:\s*,\s*[+-]?\d+)+`)
+	return numericCommaToken.ReplaceAllStringFunc(answer, func(token string) string {
+		if isNumericCommaList(token) {
+			return normalizeCommaSpacing(token)
+		}
+		return strings.ReplaceAll(token, ",", "")
+	})
+}
+
+func isNumericCommaList(token string) bool {
+	parts := strings.Split(token, ",")
+	if len(parts) < 2 {
+		return false
+	}
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		part = strings.TrimPrefix(part, "+")
+		part = strings.TrimPrefix(part, "-")
+		if part == "" || !regexp.MustCompile(`^\d+$`).MatchString(part) {
+			return false
+		}
+		parts[i] = part
+	}
+	if strings.Contains(token, ", ") || strings.Contains(token, " ,") {
+		return true
+	}
+	if len(parts) >= 4 {
+		return true
+	}
+	for i := 1; i < len(parts); i++ {
+		if len(parts[i]) != 3 {
+			return true
+		}
+	}
+	return len(parts[0]) > 3
+}
+
+func normalizeCommaSpacing(token string) string {
+	commaPattern := regexp.MustCompile(`\s*,\s*`)
+	return commaPattern.ReplaceAllString(strings.TrimSpace(token), ", ")
+}
+
 // verifyAnswer verifies if predicted answer is correct
 func verifyAnswer(predicted, groundTruth string) bool {
 	// Normalize answers for comparison
@@ -2002,6 +2119,10 @@ func verifyAnswer(predicted, groundTruth string) bool {
 	// Exact match
 	if predicted == groundTruth {
 		return true
+	}
+
+	if looksNumericAnswer(predicted) || looksNumericAnswer(groundTruth) {
+		return false
 	}
 
 	// Check if predicted contains ground truth
@@ -2017,6 +2138,14 @@ func verifyAnswer(predicted, groundTruth string) bool {
 	return false
 }
 
+func looksNumericAnswer(answer string) bool {
+	answer = strings.TrimSpace(answer)
+	if answer == "" {
+		return false
+	}
+	return regexp.MustCompile(`^[+-]?\d+(?:\.\d+)?$`).MatchString(answer)
+}
+
 // normalizeAnswer normalizes answer for comparison
 func normalizeAnswer(answer string) string {
 	// 1. Convert to lowercase
@@ -2028,12 +2157,7 @@ func normalizeAnswer(answer string) string {
 		answer = strings.ReplaceAll(answer, symbol, "")
 	}
 
-	// 3. Remove thousand separators (commas in numbers)
-	// Use regex to only remove commas in numbers, e.g.: 89,706 -> 89706
-	commaPattern := regexp.MustCompile(`(\d),(\d)`)
-	for commaPattern.MatchString(answer) {
-		answer = commaPattern.ReplaceAllString(answer, "${1}${2}")
-	}
+	answer = normalizeNumericCommaUsage(answer)
 
 	// 4. Normalize list separators: ensure space after comma
 	// e.g.: "a,b,c" -> "a, b, c"
