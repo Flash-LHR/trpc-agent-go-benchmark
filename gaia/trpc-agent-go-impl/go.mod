@@ -4,25 +4,14 @@ go 1.24.1
 
 toolchain go1.24.9
 
-replace (
-	trpc.group/trpc-go/trpc-agent-go => ../../../../../..
-	trpc.group/trpc-go/trpc-agent-go/evaluation => ../../../../../../evaluation
-	trpc.group/trpc-go/trpc-agent-go/model/anthropic => ../../../../../../model/anthropic
-	trpc.group/trpc-go/trpc-agent-go/model/gemini => ../../../../../../model/gemini
-	trpc.group/trpc-go/trpc-agent-go/model/ollama => ../../../../../../model/ollama
-	trpc.group/trpc-go/trpc-agent-go/model/provider => ../../../../../../model/provider
-	trpc.group/trpc-go/trpc-agent-go/runner/bestofn => ../../../../../../runner/bestofn
-	trpc.group/trpc-go/trpc-agent-go/storage/mysql => ../../../../../../storage/mysql
-)
-
 require (
 	github.com/google/uuid v1.6.0
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/stretchr/testify v1.11.1
 	github.com/xuri/excelize/v2 v2.8.1
-	trpc.group/trpc-go/trpc-agent-go v1.7.0
-	trpc.group/trpc-go/trpc-agent-go/evaluation v0.8.0
-	trpc.group/trpc-go/trpc-agent-go/runner/bestofn v0.8.0
+	trpc.group/trpc-go/trpc-agent-go v1.10.1-0.20260610092509-3e07729536f0
+	trpc.group/trpc-go/trpc-agent-go/evaluation v1.10.1-0.20260610092509-3e07729536f0
+	trpc.group/trpc-go/trpc-agent-go/runner/bestofn v0.0.0-20260610092509-3e07729536f0
 	trpc.group/trpc-go/trpc-agent-go/tool/arxivsearch v1.1.1
 	trpc.group/trpc-go/trpc-agent-go/tool/wikipedia v0.0.0-20260113110153-06eda6b5e595
 )
@@ -102,8 +91,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	trpc.group/trpc-go/trpc-a2a-go v0.2.5 // indirect
 	trpc.group/trpc-go/trpc-agent-go/knowledge/document/reader/pdf v0.8.1-0.20251227062801-17f5b0e8bbfd // indirect
-	trpc.group/trpc-go/trpc-agent-go/model/anthropic v0.8.0 // indirect
-	trpc.group/trpc-go/trpc-agent-go/model/gemini v0.8.1-0.20251222024650-ea147adf3d21 // indirect
-	trpc.group/trpc-go/trpc-agent-go/model/ollama v0.8.0 // indirect
-	trpc.group/trpc-go/trpc-agent-go/model/provider v0.8.0 // indirect
+	trpc.group/trpc-go/trpc-agent-go/model/anthropic v1.10.1-0.20260610092509-3e07729536f0 // indirect
+	trpc.group/trpc-go/trpc-agent-go/model/gemini v1.10.1-0.20260610092509-3e07729536f0 // indirect
+	trpc.group/trpc-go/trpc-agent-go/model/ollama v1.10.1-0.20260610092509-3e07729536f0 // indirect
+	trpc.group/trpc-go/trpc-agent-go/model/provider v1.10.1-0.20260610092509-3e07729536f0 // indirect
 )

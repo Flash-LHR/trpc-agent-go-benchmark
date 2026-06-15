@@ -113,7 +113,8 @@ go run ./cmd/baseline -model gpt-4o
 # Enable Ralph Loop (outer loop verification)
 go run ./cmd/ralph -max-iterations 3
 
-# Enable LLM verifier best-of-N selection
+# Enable LLM verifier best-of-N selection.
+# Candidate model defaults to -model, and judge model defaults to deepseek-v4-flash.
 go run ./cmd/llmverifier -model gpt-5 -attempts 5
 ```
 
@@ -141,7 +142,7 @@ LLM verifier arguments:
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `-attempts` | `3` | Number of candidate attempts |
-| `-judge-model` | `gpt-5` | Judge model name |
+| `-judge-model` | `deepseek-v4-flash` | Judge model name |
 | `-judge-samples` | `1` | Number of judge samples per candidate comparison |
 | `-judge-max-tokens` | `32768` | Judge max output tokens |
 
@@ -187,17 +188,17 @@ assistant message must contain a `FINAL ANSWER: <answer>` line.
 
 The LLM verifier runner is available as a separate command:
 `go run ./cmd/llmverifier`. It runs multiple candidate attempts for each GAIA
-task and uses a judge model with a GAIA-specific pairwise rubric to select the
+task and uses a judge model with a task-agnostic pairwise rubric to select the
 winner. Candidate attempts run in parallel by default, with attempt parallelism
 set to the configured `-attempts` value.
 
-Results (GAIA Level 1 validation, 53 tasks, run date: 2026-06-10):
+Results (GAIA Level 1 validation, 53 tasks, run date: 2026-06-15):
 
 | Run | Mode | Correct | Accuracy | Avg steps | Avg time | Avg tokens | Avg tool calls |
 |-----|------|--------:|---------:|----------:|---------:|-----------:|---------------:|
 | A | react | 41/53 | 77.36% | 7.26 | 201.2s | 22,588 | 6.15 |
 | B | react + ralph-loop (runner) | 39/53 | 73.58% | 7.85 | 207.5s | 20,516 | 6.83 |
-| C | react + llm-verifier best-of-N (`-attempts 5`) | 42/53 | 79.25% | 4.96 | 243.3s | 16,592 | 3.98 |
+| C | react + llm-verifier best-of-N (`-attempts 5`) | 47/53 | 88.68% | 5.04 | 244.6s | 15,199 | 4.02 |
 
 Notes:
 

@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -334,24 +335,19 @@ func loadDataset(path string) ([]GAIATask, error) {
 // filterTasksByID filters tasks by task ID or index
 // Supports: task ID (UUID format) or index number (1-based, e.g., "28" means the 28th task)
 func filterTasksByID(tasks []GAIATask, idOrIndex string) []GAIATask {
-	// Try parsing as 1-based index
-	if idx, err := fmt.Sscanf(idOrIndex, "%d", new(int)); err == nil && idx == 1 {
-		var index int
-		fmt.Sscanf(idOrIndex, "%d", &index)
-		if index > 0 && index <= len(tasks) {
-			log.Printf("Found task by index: [%d/%d] %s", index, len(tasks), tasks[index-1].TaskID)
-			return []GAIATask{tasks[index-1]}
-		}
-	}
-
 	// Try matching as task ID
+	query := strings.TrimSpace(idOrIndex)
 	for i, task := range tasks {
-		if task.TaskID == idOrIndex {
+		if task.TaskID == query {
 			log.Printf("Found task by ID: [%d/%d] %s", i+1, len(tasks), task.TaskID)
 			return []GAIATask{task}
 		}
 	}
-
+	// Try parsing as 1-based index
+	if index, err := strconv.Atoi(query); err == nil && index > 0 && index <= len(tasks) {
+		log.Printf("Found task by index: [%d/%d] %s", index, len(tasks), tasks[index-1].TaskID)
+		return []GAIATask{tasks[index-1]}
+	}
 	return nil
 }
 
