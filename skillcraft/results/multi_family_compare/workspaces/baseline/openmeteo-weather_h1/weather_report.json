@@ -1,0 +1,120 @@
+{
+  "cities": [
+    {
+      "name": "Tokyo",
+      "coordinates": {
+        "latitude": 35.6895,
+        "longitude": 139.69171
+      },
+      "current": {
+        "temperature": 16.3,
+        "feels_like": 14.8,
+        "humidity": 52,
+        "weather_description": "Partly cloudy"
+      },
+      "hourly_forecast": {
+        "avg": 16.2,
+        "max": 23.8,
+        "min": 8.0
+      },
+      "daily_forecast": {
+        "avg_high": 22.2,
+        "avg_low": 14.1
+      }
+    },
+    {
+      "name": "New York",
+      "coordinates": {
+        "latitude": 40.71427,
+        "longitude": -74.00597
+      },
+      "current": {
+        "temperature": 19.6,
+        "feels_like": 20.7,
+        "humidity": 71,
+        "weather_description": "Overcast"
+      },
+      "hourly_forecast": {
+        "avg": 14.9,
+        "max": 24.9,
+        "min": 2.3
+      },
+      "daily_forecast": {
+        "avg_high": 21.9,
+        "avg_low": 11.5
+      }
+    },
+    {
+      "name": "London",
+      "coordinates": {
+        "latitude": 51.50853,
+        "longitude": -0.12574
+      },
+      "current": {
+        "temperature": 14.0,
+        "feels_like": 11.3,
+        "humidity": 63,
+        "weather_description": "Overcast"
+      },
+      "hourly_forecast": {
+        "avg": 10.3,
+        "max": 17.3,
+        "min": 5.4
+      },
+      "daily_forecast": {
+        "avg_high": 14.3,
+        "avg_low": 6.3
+      }
+    },
+    {
+      "name": "Sydney",
+      "coordinates": {
+        "latitude": -33.86785,
+        "longitude": 151.20732
+      },
+      "current": {
+        "temperature": 17.4,
+        "feels_like": 16.9,
+        "humidity": 82,
+        "weather_description": "Partly cloudy"
+      },
+      "hourly_forecast": {
+        "avg": 18.9,
+        "max": 27.2,
+        "min": 10.0
+      },
+      "daily_forecast": {
+        "avg_high": 27.3,
+        "avg_low": 19.8
+      }
+    },
+    {
+      "name": "Dubai",
+      "coordinates": {
+        "latitude": 25.07725,
+        "longitude": 55.30927
+      },
+      "current": {
+        "temperature": 26.3,
+        "feels_like": 27.8,
+        "humidity": 57,
+        "weather_description": "Clear sky"
+      },
+      "hourly_forecast": {
+        "avg": 30.0,
+        "max": 37.8,
+        "min": 20.1
+      },
+      "daily_forecast": {
+        "avg_high": 32.9,
+        "avg_low": 25.8
+      }
+    }
+  ],
+  "global_summary": {
+    "total_cities": 5,
+    "warmest_city": "Dubai",
+    "coldest_city": "London"
+  },
+  "analysis_date": "2024-01-15"
+}

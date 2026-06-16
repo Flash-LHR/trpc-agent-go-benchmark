@@ -1,0 +1,181 @@
+{
+  "economies": [
+    {
+      "country_code": "US",
+      "country_name": "United States",
+      "region": "North America",
+      "economic_indicators": {
+        "gdp": {
+          "year": "2023",
+          "value": 27292170793214.4,
+          "indicator": "GDP (current US$)"
+        },
+        "population": {
+          "year": "2022",
+          "value": 334017321,
+          "indicator": "Population, total"
+        },
+        "gdp_per_capita": {
+          "year": "2023",
+          "value": 81032.262117545,
+          "indicator": "GDP per capita (current US$)"
+        },
+        "inflation_rate": {
+          "year": "2022",
+          "value": 8.00279982052121,
+          "indicator": "Inflation, consumer prices (annual %)"
+        },
+        "unemployment_rate": {
+          "year": "2022",
+          "value": 3.65,
+          "indicator": "Unemployment, total (% of total labor force) (modeled ILO estimate)"
+        }
+      },
+      "economic_power_rank": 1,
+      "development_tier": "Advanced"
+    },
+    {
+      "country_code": "CHN",
+      "country_name": "China",
+      "region": "East Asia & Pacific",
+      "economic_indicators": {
+        "gdp": {
+          "year": "2023",
+          "value": 18270356654533.2,
+          "indicator": "GDP (current US$)"
+        },
+        "population": {
+          "year": "2022",
+          "value": 1412175000,
+          "indicator": "Population, total"
+        },
+        "gdp_per_capita": {
+          "year": "2023",
+          "value": 12951.1782397043,
+          "indicator": "GDP per capita (current US$)"
+        },
+        "inflation_rate": {
+          "year": "2022",
+          "value": 1.9735755573905,
+          "indicator": "Inflation, consumer prices (annual %)"
+        },
+        "unemployment_rate": {
+          "year": "2022",
+          "value": 4.98,
+          "indicator": "Unemployment, total (% of total labor force) (modeled ILO estimate)"
+        }
+      },
+      "economic_power_rank": 2,
+      "development_tier": "Upper middle income"
+    },
+    {
+      "country_code": "JPN",
+      "country_name": "Japan",
+      "region": "East Asia & Pacific",
+      "economic_indicators": {
+        "gdp": {
+          "year": "2023",
+          "value": 4213167237905.83,
+          "indicator": "GDP (current US$)"
+        },
+        "population": {
+          "year": "2022",
+          "value": 125124989,
+          "indicator": "Population, total"
+        },
+        "gdp_per_capita": {
+          "year": "2023",
+          "value": 33836.1756271617,
+          "indicator": "GDP per capita (current US$)"
+        },
+        "inflation_rate": {
+          "year": "2022",
+          "value": 2.49770278172255,
+          "indicator": "Inflation, consumer prices (annual %)"
+        },
+        "unemployment_rate": {
+          "year": "2022",
+          "value": 2.614,
+          "indicator": "Unemployment, total (% of total labor force) (modeled ILO estimate)"
+        }
+      },
+      "economic_power_rank": 3,
+      "development_tier": "High income"
+    },
+    {
+      "country_code": "DEU",
+      "country_name": "Germany",
+      "region": "Europe & Central Asia",
+      "economic_indicators": {
+        "gdp": {
+          "year": "2023",
+          "value": 4562207532490.28,
+          "indicator": "GDP (current US$)"
+        },
+        "population": {
+          "year": "2022",
+          "value": 83177813,
+          "indicator": "Population, total"
+        },
+        "gdp_per_capita": {
+          "year": "2023",
+          "value": 54776.7668235491,
+          "indicator": "GDP per capita (current US$)"
+        },
+        "inflation_rate": {
+          "year": "2022",
+          "value": 6.87257438551096,
+          "indicator": "Inflation, consumer prices (annual %)"
+        },
+        "unemployment_rate": {
+          "year": "2022",
+          "value": 3.137,
+          "indicator": "Unemployment, total (% of total labor force) (modeled ILO estimate)"
+        }
+      },
+      "economic_power_rank": 4,
+      "development_tier": "High income"
+    },
+    {
+      "country_code": "IND",
+      "country_name": "India",
+      "region": "South Asia",
+      "economic_indicators": {
+        "gdp": {
+          "year": "2023",
+          "value": 3638489096033.86,
+          "indicator": "GDP (current US$)"
+        },
+        "population": {
+          "year": "2022",
+          "value": 1425423212,
+          "indicator": "Population, total"
+        },
+        "gdp_per_capita": {
+          "year": "2023",
+          "value": 2530.12031278204,
+          "indicator": "GDP per capita (current US$)"
+        },
+        "inflation_rate": {
+          "year": "2022",
+          "value": 6.69903414079852,
+          "indicator": "Inflation, consumer prices (annual %)"
+        },
+        "unemployment_rate": {
+          "year": "2022",
+          "value": 4.822,
+          "indicator": "Unemployment, total (% of total labor force) (modeled ILO estimate)"
+        }
+      },
+      "economic_power_rank": 5,
+      "development_tier": "Lower middle income"
+    }
+  ],
+  "summary": {
+    "total_countries": 5,
+    "largest_economy": {
+      "country": "United States"
+    }
+  },
+  "analysis_date": "2024-01-15"
+}

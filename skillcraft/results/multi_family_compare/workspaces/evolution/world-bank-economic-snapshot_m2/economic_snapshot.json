@@ -1,0 +1,127 @@
+{
+  "economies": [
+    {
+      "country_code": "US",
+      "country_name": "United States",
+      "region": "North America",
+      "economic_indicators": {
+        "gdp": {
+          "year": "2023",
+          "value": 27292170793214.4,
+          "indicator": "GDP (current US$)"
+        },
+        "gdp_per_capita": {
+          "year": "2023",
+          "value": 81032.262117545,
+          "indicator": "GDP per capita (current US$)"
+        },
+        "inflation_rate": {
+          "year": "2023",
+          "value": 4.11633838374488,
+          "indicator": "Inflation, consumer prices (annual %)"
+        },
+        "unemployment_rate": {
+          "year": "2023",
+          "value": 3.638,
+          "indicator": "Unemployment, total (% of total labor force) (modeled ILO estimate)"
+        }
+      },
+      "economic_power_rank": 1,
+      "development_tier": "Advanced"
+    },
+    {
+      "country_code": "CHN",
+      "country_name": "China",
+      "region": "East Asia & Pacific",
+      "economic_indicators": {
+        "gdp": {
+          "year": "2023",
+          "value": 18270356654533.2,
+          "indicator": "GDP (current US$)"
+        },
+        "gdp_per_capita": {
+          "year": "2023",
+          "value": 12951.1782397043,
+          "indicator": "GDP per capita (current US$)"
+        },
+        "inflation_rate": {
+          "year": "2023",
+          "value": 0.23483682889305,
+          "indicator": "Inflation, consumer prices (annual %)"
+        },
+        "unemployment_rate": {
+          "year": "2023",
+          "value": 4.67,
+          "indicator": "Unemployment, total (% of total labor force) (modeled ILO estimate)"
+        }
+      },
+      "economic_power_rank": 2,
+      "development_tier": "Developing"
+    },
+    {
+      "country_code": "JPN",
+      "country_name": "Japan",
+      "region": "East Asia & Pacific",
+      "economic_indicators": {
+        "gdp": {
+          "year": "2023",
+          "value": 4213167237905.83,
+          "indicator": "GDP (current US$)"
+        },
+        "gdp_per_capita": {
+          "year": "2023",
+          "value": 33836.1756271617,
+          "indicator": "GDP per capita (current US$)"
+        },
+        "inflation_rate": {
+          "year": "2023",
+          "value": 3.26813365933163,
+          "indicator": "Inflation, consumer prices (annual %)"
+        },
+        "unemployment_rate": {
+          "year": "2023",
+          "value": 2.6,
+          "indicator": "Unemployment, total (% of total labor force) (modeled ILO estimate)"
+        }
+      },
+      "economic_power_rank": 3,
+      "development_tier": "Developed"
+    },
+    {
+      "country_code": "DEU",
+      "country_name": "Germany",
+      "region": "Europe & Central Asia",
+      "economic_indicators": {
+        "gdp": {
+          "year": "2023",
+          "value": 4562207532490.28,
+          "indicator": "GDP (current US$)"
+        },
+        "gdp_per_capita": {
+          "year": "2023",
+          "value": 54776.7668235491,
+          "indicator": "GDP per capita (current US$)"
+        },
+        "inflation_rate": {
+          "year": "2023",
+          "value": 5.94643667725823,
+          "indicator": "Inflation, consumer prices (annual %)"
+        },
+        "unemployment_rate": {
+          "year": "2023",
+          "value": 3.071,
+          "indicator": "Unemployment, total (% of total labor force) (modeled ILO estimate)"
+        }
+      },
+      "economic_power_rank": 4,
+      "development_tier": "Developed"
+    }
+  ],
+  "summary": {
+    "total_countries": 4,
+    "largest_economy": {
+      "country": "United States"
+    }
+  },
+  "analysis_date": "2024-01-15"
+}

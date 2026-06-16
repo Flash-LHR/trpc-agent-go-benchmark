@@ -1,0 +1,131 @@
+{
+  "economies": [
+    {
+      "country_code": "US",
+      "country_name": "United States",
+      "region": "North America",
+      "economic_indicators": {
+        "gdp": {
+          "value": 27292170793214.4
+        },
+        "gdp_per_capita": {
+          "value": 81032.26
+        },
+        "population": {
+          "value": 336806231
+        },
+        "inflation_rate": {
+          "value": 4.12
+        },
+        "unemployment_rate": {
+          "value": 3.64
+        }
+      },
+      "economic_power_rank": 1,
+      "development_tier": "Advanced"
+    },
+    {
+      "country_code": "CHN",
+      "country_name": "China",
+      "region": "East Asia & Pacific",
+      "economic_indicators": {
+        "gdp": {
+          "value": 18270356654533.2
+        },
+        "gdp_per_capita": {
+          "value": 12951.18
+        },
+        "population": {
+          "value": 1410710000
+        },
+        "inflation_rate": {
+          "value": 0.23
+        },
+        "unemployment_rate": {
+          "value": 4.67
+        }
+      },
+      "economic_power_rank": 2,
+      "development_tier": "Developing"
+    },
+    {
+      "country_code": "JPN",
+      "country_name": "Japan",
+      "region": "East Asia & Pacific",
+      "economic_indicators": {
+        "gdp": {
+          "value": 4213167237905.83
+        },
+        "gdp_per_capita": {
+          "value": 33836.18
+        },
+        "population": {
+          "value": 124516650
+        },
+        "inflation_rate": {
+          "value": 3.27
+        },
+        "unemployment_rate": {
+          "value": 2.6
+        }
+      },
+      "economic_power_rank": 3,
+      "development_tier": "Developed"
+    },
+    {
+      "country_code": "DEU",
+      "country_name": "Germany",
+      "region": "Europe & Central Asia",
+      "economic_indicators": {
+        "gdp": {
+          "value": 4562207532490.28
+        },
+        "gdp_per_capita": {
+          "value": 54776.77
+        },
+        "population": {
+          "value": 83287273
+        },
+        "inflation_rate": {
+          "value": 5.95
+        },
+        "unemployment_rate": {
+          "value": 3.07
+        }
+      },
+      "economic_power_rank": 4,
+      "development_tier": "Advanced"
+    },
+    {
+      "country_code": "IND",
+      "country_name": "India",
+      "region": "South Asia",
+      "economic_indicators": {
+        "gdp": {
+          "value": 3638489096033.86
+        },
+        "gdp_per_capita": {
+          "value": 2530.12
+        },
+        "population": {
+          "value": 1438069596
+        },
+        "inflation_rate": {
+          "value": 5.65
+        },
+        "unemployment_rate": {
+          "value": 4.17
+        }
+      },
+      "economic_power_rank": 5,
+      "development_tier": "Emerging"
+    }
+  ],
+  "summary": {
+    "total_countries": 5,
+    "largest_economy": {
+      "country": "United States"
+    }
+  },
+  "analysis_date": "2024-01-15"
+}

@@ -10,6 +10,7 @@ Benchmark suites for `trpc-agent-go`.
 - `gaia`: GAIA benchmark implementation and assets.
 - `knowledge`: Knowledge-system evaluation assets and scripts.
 - `memory`: Long-context and memory-backend benchmarks.
+- `skillcraft`: SkillCraft task benchmark for baseline vs. evolution skill reuse.
 - `summary`: Session summary evaluation assets and runner.
 - `toolsearch`: Tool-search evaluation assets and runner.
 

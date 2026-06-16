@@ -1,0 +1,55 @@
+{
+  "recipes": [
+    {
+      "name": "Spaghetti Carbonara",
+      "category": "Pasta",
+      "cuisine": "Italian",
+      "ingredient_count": 8,
+      "difficulty_rating": "Medium",
+      "estimated_cooking_time_min": 30
+    },
+    {
+      "name": "Tandoori Chicken",
+      "category": "Chicken",
+      "cuisine": "Indian",
+      "ingredient_count": 6,
+      "difficulty_rating": "Medium",
+      "estimated_cooking_time_min": 15
+    },
+    {
+      "name": "Pad Thai",
+      "category": "Seafood",
+      "cuisine": "Thai",
+      "ingredient_count": 10,
+      "difficulty_rating": "Hard",
+      "estimated_cooking_time_min": 40
+    },
+    {
+      "name": "Beef Bourguignon",
+      "category": "Beef",
+      "cuisine": "French",
+      "ingredient_count": 12,
+      "difficulty_rating": "Hard",
+      "estimated_cooking_time_min": 120
+    },
+    {
+      "name": "Sushi",
+      "category": "Seafood",
+      "cuisine": "Japanese",
+      "ingredient_count": 6,
+      "difficulty_rating": "Medium",
+      "estimated_cooking_time_min": 30
+    }
+  ],
+  "summary": {
+    "total_recipes": 5,
+    "cuisines_covered": [
+      "Italian",
+      "Indian",
+      "Thai",
+      "French",
+      "Japanese"
+    ]
+  },
+  "analysis_date": "2024-01-15"
+}

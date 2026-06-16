@@ -1,0 +1,94 @@
+{
+  "cities": [
+    {
+      "name": "Tokyo",
+      "coordinates": {
+        "latitude": 35.6895,
+        "longitude": 139.69171
+      },
+      "current": {
+        "temperature": 15,
+        "feels_like": 14,
+        "humidity": 60
+      },
+      "hourly_forecast": {
+        "avg_temperature": 16,
+        "max_temperature": 20,
+        "min_temperature": 12
+      },
+      "daily_forecast": {
+        "avg_high": 22.2,
+        "avg_low": 14.1
+      }
+    },
+    {
+      "name": "New York",
+      "coordinates": {
+        "latitude": 40.71427,
+        "longitude": -74.00597
+      },
+      "current": {
+        "temperature": 18,
+        "feels_like": 17,
+        "humidity": 53
+      },
+      "hourly_forecast": {
+        "avg_temperature": 12,
+        "max_temperature": 18,
+        "min_temperature": 8
+      },
+      "daily_forecast": {
+        "avg_high": 15.2,
+        "avg_low": 9.0
+      }
+    },
+    {
+      "name": "London",
+      "coordinates": {
+        "latitude": 51.50853,
+        "longitude": -0.12574
+      },
+      "current": {
+        "temperature": 12,
+        "feels_like": 11,
+        "humidity": 70
+      },
+      "hourly_forecast": {
+        "avg_temperature": 14,
+        "max_temperature": 20,
+        "min_temperature": 10
+      },
+      "daily_forecast": {
+        "avg_high": 14.9,
+        "avg_low": 7.1
+      }
+    },
+    {
+      "name": "Sydney",
+      "coordinates": {
+        "latitude": -33.86785,
+        "longitude": 151.20732
+      },
+      "current": {
+        "temperature": 19,
+        "feels_like": 18,
+        "humidity": 68
+      },
+      "hourly_forecast": {
+        "avg_temperature": 20,
+        "max_temperature": 25,
+        "min_temperature": 15
+      },
+      "daily_forecast": {
+        "avg_high": 21.9,
+        "avg_low": 13.5
+      }
+    }
+  ],
+  "global_summary": {
+    "total_cities": 4,
+    "warmest_city": "Tokyo",
+    "coldest_city": "London"
+  },
+  "analysis_date": "2024-01-15"
+}

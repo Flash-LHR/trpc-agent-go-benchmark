@@ -1,0 +1,37 @@
+{
+  "recipes": [
+    {
+      "name": "Spaghetti Carbonara",
+      "category": "Pasta",
+      "cuisine": "Italian",
+      "ingredient_count": 8,
+      "difficulty_rating": "Medium",
+      "estimated_cooking_time_min": 30
+    },
+    {
+      "name": "Tandoori chicken",
+      "category": "Chicken",
+      "cuisine": "Indian",
+      "ingredient_count": 11,
+      "difficulty_rating": "Medium",
+      "estimated_cooking_time_min": 60
+    },
+    {
+      "name": "Pad Thai",
+      "category": "Seafood",
+      "cuisine": "Thai",
+      "ingredient_count": 10,
+      "difficulty_rating": "Medium",
+      "estimated_cooking_time_min": 30
+    }
+  ],
+  "summary": {
+    "total_recipes": 3,
+    "cuisines_covered": [
+      "Italian",
+      "Indian",
+      "Thai"
+    ]
+  },
+  "analysis_date": "2024-01-15"
+}

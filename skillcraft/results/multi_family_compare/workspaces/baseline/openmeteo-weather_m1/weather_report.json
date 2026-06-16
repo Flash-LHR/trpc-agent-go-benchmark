@@ -1,0 +1,90 @@
+{
+  "cities": [
+    {
+      "name": "Tokyo",
+      "coordinates": {
+        "latitude": 35.6895,
+        "longitude": 139.6917
+      },
+      "current": {
+        "temperature": 16.8,
+        "weather_description": "Mainly clear"
+      },
+      "hourly_forecast": {
+        "avg_temperature": 16.2,
+        "max_temperature": 23.8,
+        "min_temperature": 8.0
+      },
+      "daily_forecast": {
+        "avg_high": 22.2,
+        "avg_low": 14.1
+      }
+    },
+    {
+      "name": "New York",
+      "coordinates": {
+        "latitude": 40.7143,
+        "longitude": -74.006
+      },
+      "current": {
+        "temperature": 19.3,
+        "weather_description": "Overcast"
+      },
+      "hourly_forecast": {
+        "avg_temperature": 15.2,
+        "max_temperature": 24.9,
+        "min_temperature": 4.3
+      },
+      "daily_forecast": {
+        "avg_high": 21.9,
+        "avg_low": 11.5
+      }
+    },
+    {
+      "name": "London",
+      "coordinates": {
+        "latitude": 51.5085,
+        "longitude": -0.1257
+      },
+      "current": {
+        "temperature": 13.7,
+        "weather_description": "Overcast"
+      },
+      "hourly_forecast": {
+        "avg_temperature": 10.9,
+        "max_temperature": 17.3,
+        "min_temperature": 4.2
+      },
+      "daily_forecast": {
+        "avg_high": 14.9,
+        "avg_low": 7.1
+      }
+    },
+    {
+      "name": "Sydney",
+      "coordinates": {
+        "latitude": -33.8679,
+        "longitude": 151.2073
+      },
+      "current": {
+        "temperature": 17.6,
+        "weather_description": "Partly cloudy"
+      },
+      "hourly_forecast": {
+        "avg_temperature": 15.6,
+        "max_temperature": 27.2,
+        "min_temperature": 8.1
+      },
+      "daily_forecast": {
+        "avg_high": 19.8,
+        "avg_low": 10.0
+      }
+    }
+  ],
+  "global_summary": {
+    "total_cities": 4,
+    "warmest_city": "New York",
+    "coldest_city": "London"
+  },
+  "analysis_date": "2024-01-15"
+}

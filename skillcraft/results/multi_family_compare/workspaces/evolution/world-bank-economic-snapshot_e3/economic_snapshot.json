@@ -1,0 +1,53 @@
+{
+  "economies": [
+    {
+      "country_code": "US",
+      "country_name": "United States",
+      "region": "North America",
+      "economic_indicators": {
+        "GDP": 25604848907611,
+        "GDP_per_capita": 76657.25,
+        "population": 334017321,
+        "inflation_rate": 8.0,
+        "unemployment_rate": 3.65
+      },
+      "economic_power_rank": 1,
+      "development_tier": "Advanced"
+    },
+    {
+      "country_code": "CHN",
+      "country_name": "China",
+      "region": "East Asia & Pacific",
+      "economic_indicators": {
+        "GDP": 18316765021690,
+        "GDP_per_capita": 12970.61,
+        "population": 1412175000,
+        "inflation_rate": 1.97,
+        "unemployment_rate": 4.98
+      },
+      "economic_power_rank": 2,
+      "development_tier": "Developing"
+    },
+    {
+      "country_code": "JPN",
+      "country_name": "Japan",
+      "region": "East Asia & Pacific",
+      "economic_indicators": {
+        "GDP": 4262463317796,
+        "GDP_per_capita": 34065.64,
+        "population": 125124989,
+        "inflation_rate": 2.5,
+        "unemployment_rate": 2.61
+      },
+      "economic_power_rank": 3,
+      "development_tier": "Developed"
+    }
+  ],
+  "summary": {
+    "total_countries": 3,
+    "largest_economy": {
+      "country": "United States"
+    }
+  },
+  "analysis_date": "2024-01-15"
+}

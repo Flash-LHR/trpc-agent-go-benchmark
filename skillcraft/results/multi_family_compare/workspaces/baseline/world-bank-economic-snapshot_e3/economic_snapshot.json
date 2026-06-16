@@ -1,0 +1,128 @@
+{
+  "economies": [
+    {
+      "country_code": "US",
+      "country_name": "United States",
+      "region": "North America",
+      "economic_indicators": {
+        "gdp": {
+          "year": "2022",
+          "value": 25604848907611,
+          "indicator": "GDP (current US$)"
+        },
+        "gdp_per_capita": {
+          "year": "2022",
+          "value": 76657.25,
+          "indicator": "GDP per capita (current US$)"
+        },
+        "population": {
+          "year": "2022",
+          "value": 334017321,
+          "indicator": "Population, total"
+        },
+        "growth_rate": {
+          "year": "2022",
+          "value": 0.5757,
+          "indicator": "Population growth (annual %)"
+        },
+        "urban_percent": {
+          "year": "2022",
+          "value": 80.03,
+          "indicator": "Urban population (% of total population)"
+        },
+        "life_expectancy": {
+          "year": "2022",
+          "value": 77.43,
+          "indicator": "Life expectancy at birth, total (years)"
+        }
+      },
+      "economic_power_rank": 1,
+      "development_tier": "Advanced"
+    },
+    {
+      "country_code": "CHN",
+      "country_name": "China",
+      "region": "East Asia & Pacific",
+      "economic_indicators": {
+        "gdp": {
+          "year": "2022",
+          "value": 18316765021690,
+          "indicator": "GDP (current US$)"
+        },
+        "gdp_per_capita": {
+          "year": "2022",
+          "value": 12970.61,
+          "indicator": "GDP per capita (current US$)"
+        },
+        "population": {
+          "year": "2022",
+          "value": 1412175000,
+          "indicator": "Population, total"
+        },
+        "growth_rate": {
+          "year": "2022",
+          "value": -0.0131,
+          "indicator": "Population growth (annual %)"
+        },
+        "urban_percent": {
+          "year": "2022",
+          "value": 65.22,
+          "indicator": "Urban population (% of total population)"
+        },
+        "life_expectancy": {
+          "year": "2022",
+          "value": 78.2,
+          "indicator": "Life expectancy at birth, total (years)"
+        }
+      },
+      "economic_power_rank": 2,
+      "development_tier": "Developing"
+    },
+    {
+      "country_code": "JPN",
+      "country_name": "Japan",
+      "region": "East Asia & Pacific",
+      "economic_indicators": {
+        "gdp": {
+          "year": "2022",
+          "value": 4262463317796,
+          "indicator": "GDP (current US$)"
+        },
+        "gdp_per_capita": {
+          "year": "2022",
+          "value": 34065.64,
+          "indicator": "GDP per capita (current US$)"
+        },
+        "population": {
+          "year": "2022",
+          "value": 125124989,
+          "indicator": "Population, total"
+        },
+        "growth_rate": {
+          "year": "2022",
+          "value": -0.4439,
+          "indicator": "Population growth (annual %)"
+        },
+        "urban_percent": {
+          "year": "2022",
+          "value": 91.98,
+          "indicator": "Urban population (% of total population)"
+        },
+        "life_expectancy": {
+          "year": "2022",
+          "value": 84.0,
+          "indicator": "Life expectancy at birth, total (years)"
+        }
+      },
+      "economic_power_rank": 3,
+      "development_tier": "Developed"
+    }
+  ],
+  "summary": {
+    "total_countries": 3,
+    "largest_economy": {
+      "country": "United States"
+    }
+  },
+  "analysis_date": "2024-01-15"
+}

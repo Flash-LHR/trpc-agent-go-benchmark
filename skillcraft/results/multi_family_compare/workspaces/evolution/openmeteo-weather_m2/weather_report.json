@@ -1,0 +1,94 @@
+{
+  "cities": [
+    {
+      "name": "Tokyo",
+      "coordinates": {
+        "latitude": 35.6895,
+        "longitude": 139.69171
+      },
+      "current": {
+        "temperature": 16.5,
+        "humidity": 70,
+        "weather_description": "Partly cloudy"
+      },
+      "hourly_forecast": {
+        "avg": 16.2,
+        "max": 23.8,
+        "min": 8.0
+      },
+      "daily_forecast": {
+        "avg_high": 22.2,
+        "avg_low": 14.1
+      }
+    },
+    {
+      "name": "New York",
+      "coordinates": {
+        "latitude": 40.71427,
+        "longitude": -74.00597
+      },
+      "current": {
+        "temperature": 9.7,
+        "humidity": 80,
+        "weather_description": "Clear sky"
+      },
+      "hourly_forecast": {
+        "avg": 12.6,
+        "max": 24.9,
+        "min": 4.3
+      },
+      "daily_forecast": {
+        "avg_high": 15.2,
+        "avg_low": 9.0
+      }
+    },
+    {
+      "name": "London",
+      "coordinates": {
+        "latitude": 51.50853,
+        "longitude": -0.12574
+      },
+      "current": {
+        "temperature": 11.0,
+        "humidity": 75,
+        "weather_description": "Overcast"
+      },
+      "hourly_forecast": {
+        "avg": 10.9,
+        "max": 17.3,
+        "min": 1.1
+      },
+      "daily_forecast": {
+        "avg_high": 14.3,
+        "avg_low": 6.3
+      }
+    },
+    {
+      "name": "Sydney",
+      "coordinates": {
+        "latitude": -33.86785,
+        "longitude": 151.20732
+      },
+      "current": {
+        "temperature": 20.1,
+        "humidity": 60,
+        "weather_description": "Clear sky"
+      },
+      "hourly_forecast": {
+        "avg": 20.5,
+        "max": 28.2,
+        "min": 10.0
+      },
+      "daily_forecast": {
+        "avg_high": 24.1,
+        "avg_low": 15.9
+      }
+    }
+  ],
+  "global_summary": {
+    "total_cities": 4,
+    "warmest_city": "Sydney",
+    "coldest_city": "New York"
+  },
+  "analysis_date": "2024-01-15"
+}

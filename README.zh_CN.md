@@ -10,6 +10,7 @@
 - `gaia`：GAIA benchmark 实现与相关资产。
 - `knowledge`：Knowledge system 评测脚本与相关资源。
 - `memory`：长上下文与 memory backend benchmark。
+- `skillcraft`：基于 SkillCraft 的 baseline/evolution 任务评测。
 - `summary`：会话摘要评测资源与 runner。
 - `toolsearch`：Tool Search 评测资源与 runner。
 

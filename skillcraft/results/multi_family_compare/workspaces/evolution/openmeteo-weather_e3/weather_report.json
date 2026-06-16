@@ -1,0 +1,61 @@
+{
+  "cities": [
+    {
+      "name": "Tokyo",
+      "coordinates": {
+        "latitude": 35.6895,
+        "longitude": 139.69171
+      },
+      "current": {},
+      "hourly_forecast": {},
+      "daily_forecast": {
+        "summary": {
+          "avg_high": 18.3,
+          "avg_low": 10.3,
+          "rainy_days": 21,
+          "total_precipitation": 179.0
+        }
+      }
+    },
+    {
+      "name": "New York",
+      "coordinates": {
+        "latitude": 40.71427,
+        "longitude": -74.00597
+      },
+      "current": {},
+      "hourly_forecast": {},
+      "daily_forecast": {
+        "summary": {
+          "avg_high": 16.6,
+          "avg_low": 5.2,
+          "rainy_days": 14,
+          "total_precipitation": 49.1
+        }
+      }
+    },
+    {
+      "name": "London",
+      "coordinates": {
+        "latitude": 51.50853,
+        "longitude": -0.12574
+      },
+      "current": {},
+      "hourly_forecast": {},
+      "daily_forecast": {
+        "summary": {
+          "avg_high": 14.3,
+          "avg_low": 6.3,
+          "rainy_days": 16,
+          "total_precipitation": 13.4
+        }
+      }
+    }
+  ],
+  "global_summary": {
+    "total_cities": 3,
+    "warmest_city": "Tokyo",
+    "coldest_city": "New York"
+  },
+  "analysis_date": "2024-01-15"
+}
