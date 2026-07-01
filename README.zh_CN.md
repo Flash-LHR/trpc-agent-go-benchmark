@@ -12,6 +12,7 @@
 - `memory`：长上下文与 memory backend benchmark。
 - `skillcraft`：基于 SkillCraft 的 baseline/evolution 任务评测。
 - `summary`：会话摘要评测资源与 runner。
+- `tau`：面向 trpc-agent-go LLMAgent 的 Tau3 text benchmark 接入。
 - `toolsearch`：Tool Search 评测资源与 runner。
 
 ## 源仓库

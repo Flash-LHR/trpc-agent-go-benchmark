@@ -12,6 +12,7 @@ Benchmark suites for `trpc-agent-go`.
 - `memory`: Long-context and memory-backend benchmarks.
 - `skillcraft`: SkillCraft task benchmark for baseline vs. evolution skill reuse.
 - `summary`: Session summary evaluation assets and runner.
+- `tau`: Tau3 text benchmark adapter for trpc-agent-go LLMAgent.
 - `toolsearch`: Tool-search evaluation assets and runner.
 
 ## Source Repository
